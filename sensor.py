@@ -35,6 +35,12 @@ from .const import DOMAIN
 _LOGGER = logging.getLogger(__name__)
 
 SENSORS_MAPPING_TEMPLATE: dict[str, SensorEntityDescription] = {
+    "serialnumber": SensorEntityDescription(
+        key="serialnumber",
+        name="Serial Number",
+        icon="mdi:dots-grid",
+    ),
+
     "firmware": SensorEntityDescription(
         key="firmware",
         name="Firmware Version",
@@ -70,6 +76,89 @@ SENSORS_MAPPING_TEMPLATE: dict[str, SensorEntityDescription] = {
         device_class=SensorDeviceClass.BATTERY,
         native_unit_of_measurement=PERCENTAGE,
     ),
+
+    "cscmeasurement": SensorEntityDescription(
+        key="cscmeasurement",
+        name="CscMeasurement",
+        icon="mdi:dots-grid",
+    ),
+
+    "wheelrevolutiondatapresent": SensorEntityDescription(
+        key="wheelrevolutiondatapresent",
+        name="Wheel Revolution Data Present",
+        icon="mdi:dots-grid",
+    ),
+
+    "crankrevolutiondatapresent": SensorEntityDescription(
+        key="crankrevolutiondatapresent",
+        name="Crank Revolution Data Present",
+        icon="mdi:dots-grid",
+    ),
+
+    "csccrankrevolution": SensorEntityDescription(
+        key="csccrankrevolution",
+        name="CSC Crank Revolution",
+        icon="mdi:dots-grid",
+    ),
+    "csccalories": SensorEntityDescription(
+        key="csccalories",
+        name="CSC Calories",
+        icon="mdi:dots-grid",
+    ),
+
+
+
+
+    "dailycrankrevolution": SensorEntityDescription(
+        key="dailycrankrevolution",
+        name="Daily Crank Revolution",
+        icon="mdi:dots-grid",
+    ),
+    "dailycalories": SensorEntityDescription(
+        key="dailycalories",
+        name="Daily Calories",
+        icon="mdi:dots-grid",
+    ),
+    "dailydistance": SensorEntityDescription(
+        key="dailydistance",
+        name="Daily Distance",
+        icon="mdi:dots-grid",
+    ),
+    "cscvalue01": SensorEntityDescription(
+        key="cscvalue01",
+        name="cscvalue01",
+        icon="mdi:dots-grid",
+    ),
+    "csc_dif_crank": SensorEntityDescription(
+        key="csc_dif_crank",
+        name="current Crank Revolution",
+        icon="mdi:dots-grid",
+    ),
+    "csc_dif_calories": SensorEntityDescription(
+        key="csc_dif_calories",
+        name="current Calories",
+        state_class=SensorStateClass.MEASUREMENT,
+        icon="mdi:dots-grid",
+    ),
+    "cscdifkcal": SensorEntityDescription(
+        key="cscdifkcal",
+        name="Dif kCal",
+        state_class=SensorStateClass.MEASUREMENT,
+        icon="mdi:dots-grid",
+    ),
+    "csctimestamp": SensorEntityDescription(
+        key="csctimestamp",
+        name="csctimestamp",
+        icon="mdi:dots-grid",
+    ),
+    "difcsctimestamp": SensorEntityDescription(
+        key="difcsctimestamp",
+        name="difcsctimestamp",
+        icon="mdi:dots-grid",
+    ),
+
+
+
 }
 
 
