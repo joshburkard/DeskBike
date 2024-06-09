@@ -82,39 +82,34 @@ class DeskBikeBluetoothDeviceData:
     async def _get_status(self, client: BleakClient, device: DeskBikeDevice) -> DeskBikeDevice:
 
         _LOGGER.debug("Getting Status")
-        # data = await client.read_gatt_char(READ_UUID)
-        # decodedData = self.decode(data)
-
-
-        # temp = ((message[13]<<8) + message[14]);
-        # ph = ((message[3]<<8) + message[4]);
-        # orp = ((message[9]<<8) + message[10]);
-        # battery = ((message[15]<<8) + message[16]);
-        # ec = ((message[5]<<8) + message[6]);
-        # tds = ((message[7]<<8) + message[8]);
-        # cloro = ((message[11]<<8) + message[12]);
-        # id(ble_DeskBike_temperature_sensor).publish_state(temp/10.0);
-        # id(ble_DeskBike_ph_sensor).publish_state(ph/100.0);
-        # id(ble_DeskBike_orp_sensor).publish_state(orp);
-        # id(ble_DeskBike_battery).publish_state(battery/31.9);
-        # id(ble_DeskBike_ec_sensor).publish_state(ec);
-        # id(ble_DeskBike_tds_sensor).publish_state(tds);
-        # id(ble_DeskBike_cloro).publish_state(cloro/10.0)
 
         #Product Name
         data = await client.read_gatt_char("00002a00-0000-1000-8000-00805f9b34fb")
         decodedData = self.decode(data)
         product_name_code = data
 
+        # Device Name
+        devicename = await client.read_gatt_char("00002a00-0000-1000-8000-00805f9b34fb")
+        device.sensors["devicename"] = str(devicename, 'utf-8')
+        device.name = devicename
+
         # Battery Status
         batterybytes = await client.read_gatt_char("00002a19-0000-1000-8000-00805f9b34fb")
         battery = int.from_bytes(batterybytes, byteorder='little')
         device.sensors["battery"] = battery
 
+        modelnumber = await client.read_gatt_char("00002a24-0000-1000-8000-00805f9b34fb")
+        serialnumber = await client.read_gatt_char("00002a25-0000-1000-8000-00805f9b34fb")
+        firmware = await client.read_gatt_char("00002a26-0000-1000-8000-00805f9b34fb")
+        hardware = await client.read_gatt_char("00002a27-0000-1000-8000-00805f9b34fb")
+        software = await client.read_gatt_char("00002a28-0000-1000-8000-00805f9b34fb")
+        device.sensors["modelnumber"] = str(modelnumber, 'utf-8')
+        device.sensors["serialnumber"] = str(serialnumber, 'utf-8')
+        device.sensors["firmware"] = str(firmware, 'utf-8')
+        device.sensors["hardware"] = str(hardware, 'utf-8')
+        device.sensors["software"] = str(software, 'utf-8')
 
 
-        #fcAdjust = 0
-        #device.sensors["freeChlorine"] = round( 0.23 * (1 - fcAdjust) * (14 - ph) ** (1/(400 - orp))*(ph - 4.1) ** ( (orp - 516)/145) + 10.0 ** ( (orp + ph * 70 - 1282 ) / 40 ), 1 );
 
         _LOGGER.debug("Got Status")
         return device

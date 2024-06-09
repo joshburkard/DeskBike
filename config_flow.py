@@ -72,8 +72,8 @@ class DeskBikeConfigFlow(ConfigFlow, domain=DOMAIN):
             _LOGGER.debug("Try Update")
             data = await deskbike.update_device(ble_device)
             _LOGGER.debug("Got Data")
-            #data.name = discovery_info.advertisement.local_name
-            data.name = discovery_info.address
+            data.name = discovery_info.advertisement.local_name
+            # data.name = discovery_info.address
             data.address = discovery_info.address
             data.identifier = discovery_info.advertisement.local_name
         except BleakError as err:
@@ -147,7 +147,7 @@ class DeskBikeConfigFlow(ConfigFlow, domain=DOMAIN):
         current_addresses = self._async_current_ids()
         for discovery_info in async_discovered_service_info(self.hass):
             address = discovery_info.address
-            _LOGGER.debug("address: %s", address)
+            # _LOGGER.debug("address: %s", address)
 
             # if address in current_addresses or address in self._discovered_devices:
             if address in self._discovered_devices:
