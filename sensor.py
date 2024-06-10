@@ -111,19 +111,32 @@ SENSORS_MAPPING_TEMPLATE: dict[str, SensorEntityDescription] = {
 
     "dailycrankrevolution": SensorEntityDescription(
         key="dailycrankrevolution",
-        name="Daily Crank Revolution",
+        name="Daily Crank Revolutions",
+        state_class=SensorStateClass.MEASUREMENT,
         icon="mdi:dots-grid",
     ),
     "dailycalories": SensorEntityDescription(
         key="dailycalories",
         name="Daily Calories",
+        state_class=SensorStateClass.MEASUREMENT,
         icon="mdi:dots-grid",
     ),
     "dailydistance": SensorEntityDescription(
         key="dailydistance",
         name="Daily Distance",
+        state_class=SensorStateClass.MEASUREMENT,
+        device_class=SensorDeviceClass.DISTANCE,
+        # native_unit_of_measurement=UnitOfLength.METERS,
+        icon="mdi:map-marker-distance",
+    ),
+
+    "cscratio": SensorEntityDescription(
+        key="cscratio",
+        name="Ratio between Crank and Calories",
+        state_class=SensorStateClass.MEASUREMENT,
         icon="mdi:dots-grid",
     ),
+
     "cscvalue01": SensorEntityDescription(
         key="cscvalue01",
         name="cscvalue01",
@@ -154,9 +167,17 @@ SENSORS_MAPPING_TEMPLATE: dict[str, SensorEntityDescription] = {
     "difcsctimestamp": SensorEntityDescription(
         key="difcsctimestamp",
         name="difcsctimestamp",
+        state_class=SensorStateClass.MEASUREMENT,
         icon="mdi:dots-grid",
     ),
 
+    "speed": SensorEntityDescription(
+        key="speed",
+        name="Speed",
+        state_class=SensorStateClass.MEASUREMENT,
+        suggested_unit_of_measurement="km/h",
+        icon="mdi:speedometer",
+    ),
 
 
 }
