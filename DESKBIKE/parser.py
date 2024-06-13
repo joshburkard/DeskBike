@@ -9,6 +9,9 @@ from collections import namedtuple
 from datetime import datetime, timedelta
 import logging
 
+import os.path
+import json
+
 # from logging import Logger
 from math import exp
 from typing import Any, Callable, Tuple
@@ -21,19 +24,28 @@ from .const import (
     BATT_100, BATT_0
 )
 
-global _lastcrankrevolution
-global _lastcalories
-global _lastcsctimestamp
-_lastcrankrevolution = 0
-_lastcalories = 0
-_lastcsctimestamp = datetime.now()
+global _last_crank_revolution
+global _last_csc_timestamp
+global _last_timestamp
+global _last_save_timestamp
+_last_crank_revolution = 0
+_last_csc_timestamp = 0
+_last_timestamp = datetime.now()
+_last_save_timestamp = datetime.now()
 
-global _dailycrankrevolution
-global _dailycalories
-global _dailymeters
-_dailycrankrevolution = 0
-_dailycalories = 0
-_dailymeters = 0
+global _daily_crank_revolution
+global _daily_distance
+global _total_crank_revolution
+global _total_distance
+_daily_crank_revolution = 0
+_daily_distance = 0
+_total_crank_revolution = 0
+_total_distance = 0
+
+global _daily_active_time
+global _total_active_time
+_daily_active_time = 0
+_total_active_time = 0
 
 READ_UUID = "00002a00-0000-1000-8000-00805f9b34fb"
 CSC_CHARACTERISTIC_UUID_READ = "00002a5b-0000-1000-8000-00805f9b34fb"
@@ -79,13 +91,13 @@ class DeskBikeBluetoothDeviceData:
 
         self._command_data = data
 
-        # self._lastcrankrevolution = self._csccrankrevolution
+        # self._last_crank_revolution = self._csc_crank_revolution
 
         #hexstring = ''.join( format(x, '02x') for x in data )
-        #csccrankrevolutionhex = "0x{0}{1}".format( hexstring[4:6], hexstring[2:4] )
+        #csc_crank_revolution_hex = "0x{0}{1}".format( hexstring[4:6], hexstring[2:4] )
 
-        #newcsccrankrevolution = int( csccrankrevolutionhex, 0)
-        #self._csccrankrevolution = newcsccrankrevolution
+        #newcsc_crank_revolution = int( csc_crank_revolution_hex, 0)
+        #self._csc_crank_revolution = newcsc_crank_revolution
 
         if self._event is None:
             return
@@ -196,6 +208,61 @@ class DeskBikeBluetoothDeviceData:
 
     async def _get_ble_notify(self, client: BleakClient, device: DeskBikeDevice) -> DeskBikeDevice:
 
+        global _daily_crank_revolution
+        global _daily_distance
+        global _daily_active_time
+        global _total_crank_revolution
+        global _total_distance
+        global _total_active_time
+        global _last_timestamp
+        global _last_crank_revolution
+        global _last_save_timestamp
+
+        # if ( ( _total_active_time == 0 ) and ( _total_crank_revolution == 0 ) ):
+        if _total_crank_revolution == 0:
+            _LOGGER.debug("initializing datas")
+            if os.path.isfile( r"/config/custom_components/deskbike/datas.json" ):
+                _LOGGER.debug("datafile found")
+                f = open( r"/config/custom_components/deskbike/datas.json" , "r")
+                filecontent = f.read()
+                f.close()
+                jsondatas = json.loads(filecontent)
+                if "total_crank_revolution" in jsondatas:
+                    _LOGGER.debug("total_crank_revolution found")
+                    _total_crank_revolution = jsondatas["total_crank_revolution"]
+                else:
+                    _total_crank_revolution = 0
+
+                if "total_active_time" in jsondatas:
+                    _LOGGER.debug("total_active_time found")
+                    _total_active_time = jsondatas["total_active_time"]
+                else:
+                    _total_active_time = 0
+
+                if "daily_crank_revolution" in jsondatas:
+                    _LOGGER.debug("daily_crank_revolution found")
+                    _daily_crank_revolution = jsondatas["daily_crank_revolution"]
+                else:
+                    _daily_crank_revolution = 0
+
+                if "daily_active_time" in jsondatas:
+                    _LOGGER.debug("daily_active_time found")
+                    _daily_active_time = jsondatas["daily_active_time"]
+                else:
+                    _daily_active_time = 0
+            else:
+                _LOGGER.debug("datafile not found")
+                _total_crank_revolution = 0
+                _total_active_time = 0
+                _daily_crank_revolution = 0
+                _daily_active_time = 0
+
+
+        _LOGGER.debug( f"_total_crank_revolution: {_total_crank_revolution}")
+        _LOGGER.debug( f"_total_active_time:      {_total_active_time}")
+        _LOGGER.debug( f"_daily_crank_revolution: {_daily_crank_revolution}")
+        _LOGGER.debug( f"_daily_active_time:      {_daily_active_time}")
+
         self._event = asyncio.Event()
         try:
             await client.start_notify(
@@ -221,100 +288,112 @@ class DeskBikeBluetoothDeviceData:
 
         _LOGGER.debug( "CSC datas: {0}".format( self._command_data ) )
 
-        if self._command_data is not None:
-            _LOGGER.debug( "CSC datas 0-1:  {0}".format( self._command_data[0:1] ) )
-            # _LOGGER.debug( "CSC datas 0-1: {0}".format( int.from_bytes( self._command_data[0:1] , byteorder='little')  ) )
+        try:
 
-            hexstring = ''.join( format(x, '02x') for x in self._command_data )
-            csccrankrevolutionhex = "0x{0}{1}".format( hexstring[4:6], hexstring[2:4] )
-            csccalorieshex = "0x{0}{1}".format( hexstring[12:14], hexstring[10:12] )
-            # _LOGGER.debug( "hexstring:  {0}".format( hexstring ) )
-            # _LOGGER.debug( "csccalorieshex:  {0}".format( csccalorieshex ) )
+            if self._command_data is not None:
+                _LOGGER.debug( "CSC datas 0-1:  {0}".format( self._command_data[0:1] ) )
+                # _LOGGER.debug( "CSC datas 0-1: {0}".format( int.from_bytes( self._command_data[0:1] , byteorder='little')  ) )
 
-            csctimestamp = datetime.now()
+                hexstring = ''.join( format(x, '02x') for x in self._command_data )
+                # device.sensors["cscmeasurement"] = hexstring
+                csc_crank_revolution_hex = "0x{0}{1}".format( hexstring[4:6], hexstring[2:4] )
+                csc_timestamp_hex = "0x{0}{1}".format( hexstring[12:14], hexstring[10:12] )
 
-            csccrankrevolution = int( csccrankrevolutionhex, 0)
-            csccalories = int( csccalorieshex, 0)
-            # device.sensors["csctimestamp"] = csctimestamp
+                now = datetime.now()
 
-            # device.sensors["csccrankrevolution"] = csccrankrevolution
-            # device.sensors["csccalories"] = csccalories
+                csc_crank_revolution = int( csc_crank_revolution_hex, 0)
+                csc_timestamp = int( csc_timestamp_hex, 0)
 
-            # check if it's midnight with a tolerance
-            # reset daily counters
-            global _dailycrankrevolution
-            global _dailycalories
-            global _dailymeters
-            now = datetime.now()
-            time0 = now.replace(hour=0, minute=0, second=0, microsecond=0)
-            time1 = now.replace(hour=0, minute=0, second=10, microsecond=0)
-            # st = now.replace(hour=0, minute=0, second=0, microsecond=0)
-            #zero = timedelta(seconds = secs+mins*60+hrs*3600)
-            #st = csctimestamp - zero # this take me to 0 hours.
-            #time1 = st + timedelta(seconds=60)
-            if csctimestamp >= time0 and csctimestamp <= time1:
-                _dailycrankrevolution = 0
-                _dailycalories = 0
-                _dailymeters = 0
-            # end check if it's midnight with a tolerance
+                # check if it's midnight with a tolerance
+                # reset daily counters
+                now = datetime.now()
+                time0 = now.replace(hour=0, minute=0, second=0, microsecond=0)
+                time1 = now.replace(hour=0, minute=0, second=10, microsecond=0)
+                # st = now.replace(hour=0, minute=0, second=0, microsecond=0)
+                #zero = timedelta(seconds = secs+mins*60+hrs*3600)
+                #st = now - zero # this take me to 0 hours.
+                #time1 = st + timedelta(seconds=60)
+                if now >= time1 and _last_timestamp <= time1:
+                    _daily_crank_revolution = 0
+                    _daily_distance = 0
+                # end check if it's midnight with a tolerance
 
-            global _lastcsctimestamp
-            difcsctimestamp = csctimestamp - _lastcsctimestamp
-            difcsctimeseconds = difcsctimestamp.total_seconds()
-            # device.sensors["difcsctimestamp"] = difcsctimeseconds
-            _lastcsctimestamp = csctimestamp
+                dif_timestamp = now - _last_timestamp
+                dif_timestamp_seconds = dif_timestamp.total_seconds()
+                # device.sensors["dif_timestamp"] = dif_timestamp_seconds
+                _last_timestamp = now
 
-            global _lastcrankrevolution
-            if _lastcrankrevolution == 0:
-                dif_crank_revolution = 0
-            elif csccrankrevolution == _lastcrankrevolution:
-                dif_crank_revolution = 0
-            elif csccrankrevolution > _lastcrankrevolution:
-                dif_crank_revolution = csccrankrevolution - _lastcrankrevolution
-            else:
-                dif_crank_revolution = csccrankrevolution - _lastcrankrevolution + 65536
-            device.sensors["csc_dif_crank"] = dif_crank_revolution
-            _lastcrankrevolution = csccrankrevolution
+                _LOGGER.debug( f"_last_crank_revolution: {_last_crank_revolution}" )
+                _LOGGER.debug( f"csc_crank_revolution:   {csc_crank_revolution}" )
+                if _last_crank_revolution == 0:
+                    dif_crank_revolution = 0
+                elif csc_crank_revolution == _last_crank_revolution:
+                    dif_crank_revolution = 0
+                elif csc_crank_revolution > _last_crank_revolution:
+                    dif_crank_revolution = csc_crank_revolution - _last_crank_revolution
+                else:
+                    dif_crank_revolution = csc_crank_revolution - _last_crank_revolution + 65536
+                # device.sensors["csc_dif_crank"] = dif_crank_revolution
+                _last_crank_revolution = csc_crank_revolution
+                _LOGGER.debug( f"dif_crank_revolution:   {dif_crank_revolution}" )
+                _LOGGER.debug( f"_last_crank_revolution: {_last_crank_revolution}" )
 
-            global _lastcalories
-            if _lastcalories == 0:
-                dif_calories = 0
-            elif csccalories == _lastcalories:
-                dif_calories = 0
-            elif csccalories > _lastcalories:
-                dif_calories = csccalories - _lastcalories
-            else:
-                dif_calories = csccalories - _lastcalories + 65536
-            device.sensors["csc_dif_calories"] = dif_calories
-            _lastcalories = csccalories
+                #global _last_csc_timestamp
+                #if _last_csc_timestamp == 0:
+                #    dif_csc_timestamp = 0
+                #elif csc_timestamp == _last_csc_timestamp:
+                #    dif_csc_timestamp = 0
+                #elif csc_timestamp > _last_csc_timestamp:
+                #    dif_csc_timestamp = csc_timestamp - _last_csc_timestamp
+                #else:
+                #    dif_csc_timestamp = csc_timestamp - _last_csc_timestamp + 65536
+                # device.sensors["csc_dif_csc_timestamp"] = dif_csc_timestamp
+                #_last_csc_timestamp = csc_timestamp
 
-            if dif_crank_revolution != 0:
-                _dailycrankrevolution = _dailycrankrevolution + dif_crank_revolution
-            device.sensors["dailycrankrevolution"] = _dailycrankrevolution
+                if dif_crank_revolution != 0:
+                    _daily_crank_revolution = _daily_crank_revolution + dif_crank_revolution
+                    _total_crank_revolution = _total_crank_revolution + dif_crank_revolution
+                device.sensors["daily_crank_revolution"] = _daily_crank_revolution
+                device.sensors["total_crank_revolution"] = _total_crank_revolution
 
-            if dif_calories != 0:
-                _dailycalories = _dailycalories + dif_calories
-            device.sensors["dailycalories"] = _dailycalories
+                _daily_distance = _daily_crank_revolution * 2.5 / 1000
+                device.sensors["daily_distance"] = _daily_distance
 
-            _dailymeters = _dailycrankrevolution * 2.5
-            device.sensors["dailydistance"] = _dailymeters
+                _total_distance = _total_crank_revolution * 2.5 / 1000
+                device.sensors["total_distance"] = _total_distance
 
-            # device.sensors["cscmeasurement"] = hexstring
 
-            if dif_crank_revolution > 0 and dif_calories > 0:
-                cscratio = dif_calories / dif_crank_revolution
-            else:
-                cscratio = 0
-            device.sensors["cscratio"] = cscratio
+                if dif_crank_revolution > 0 and dif_timestamp_seconds > 0:
+                    _daily_active_time = _daily_active_time + dif_timestamp_seconds
+                    _total_active_time = _total_active_time + dif_timestamp_seconds
+                    speed = dif_crank_revolution * 2.5 / dif_timestamp_seconds * 3600 / 1000
+                else:
+                    speed = 0
+                device.sensors["current_speed"] = speed
+                device.sensors["daily_active_time"] = _daily_active_time
+                device.sensors["total_active_time"] = _total_active_time
 
-            if dif_crank_revolution > 0 and difcsctimeseconds > 0:
-                speed = dif_crank_revolution * 2.5 / difcsctimeseconds * 3600 / 1000
-            else:
-                speed = 0
-            device.sensors["speed"] = speed
+                # save to file
+                dif_save_timestamp = now - _last_save_timestamp
+                dif_save_timestamp_seconds = dif_save_timestamp.total_seconds()
+                if dif_save_timestamp_seconds > 60:
+                    _LOGGER.debug("we will save now the current datas to the file")
+                    _last_save_timestamp = now
 
-        # else:
-            # device.sensors["cscmeasurement"] = None
+                    datas = {
+                        "total_crank_revolution" : _total_crank_revolution,
+                        "total_active_time" : _total_active_time,
+                        "daily_crank_revolution" : _daily_crank_revolution,
+                        "daily_active_time" : _daily_active_time,
+                    }
+                    jsondatas = json.dumps(datas)
+                    _LOGGER.debug(jsondatas)
+                    f = open( r"/config/custom_components/deskbike/datas.json" ,"w")
+                    f.write( jsondatas )
+                    f.close()
+                    _LOGGER.debug("saved data to file")
+        except Exception as err:
+            _LOGGER.debug(f"error: {err}")
 
         self._command_data = None
         return device

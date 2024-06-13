@@ -1,5 +1,6 @@
 ﻿"""Parser for DeskBike BLE advertisements."""
 from __future__ import annotations
+from homeassistant.core import HomeAssistant
 
 from .parser import DeskBikeBluetoothDeviceData, DeskBikeDevice
 

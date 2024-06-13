@@ -83,53 +83,63 @@ SENSORS_MAPPING_TEMPLATE: dict[str, SensorEntityDescription] = {
         icon="mdi:dots-grid",
     ),
 
-    "wheelrevolutiondatapresent": SensorEntityDescription(
-        key="wheelrevolutiondatapresent",
-        name="Wheel Revolution Data Present",
-        icon="mdi:dots-grid",
-    ),
-
-    "crankrevolutiondatapresent": SensorEntityDescription(
-        key="crankrevolutiondatapresent",
-        name="Crank Revolution Data Present",
-        icon="mdi:dots-grid",
-    ),
-
-    "csccrankrevolution": SensorEntityDescription(
-        key="csccrankrevolution",
-        name="CSC Crank Revolution",
-        icon="mdi:dots-grid",
-    ),
-    "csccalories": SensorEntityDescription(
-        key="csccalories",
-        name="CSC Calories",
-        icon="mdi:dots-grid",
-    ),
 
 
 
 
-    "dailycrankrevolution": SensorEntityDescription(
-        key="dailycrankrevolution",
+    "daily_crank_revolution": SensorEntityDescription(
+        key="daily_crank_revolution",
         name="Daily Crank Revolutions",
         state_class=SensorStateClass.MEASUREMENT,
-        icon="mdi:dots-grid",
+        icon="mdi:progress-pencil",
     ),
-    "dailycalories": SensorEntityDescription(
-        key="dailycalories",
-        name="Daily Calories",
-        state_class=SensorStateClass.MEASUREMENT,
-        icon="mdi:dots-grid",
-    ),
-    "dailydistance": SensorEntityDescription(
-        key="dailydistance",
+    "daily_distance": SensorEntityDescription(
+        key="daily_distance",
         name="Daily Distance",
-        state_class=SensorStateClass.MEASUREMENT,
+        state_class=SensorStateClass.TOTAL_INCREASING,
         device_class=SensorDeviceClass.DISTANCE,
         # native_unit_of_measurement=UnitOfLength.METERS,
+        # native_unit_of_measurement=UnitOfLength.KILOMETERS,
+        # native_unit_of_measurement=km,
+        # suggested_unit_of_measurement="km"
         icon="mdi:map-marker-distance",
     ),
+    "daily_active_time": SensorEntityDescription(
+        key="daily_active_time",
+        name="Daily Active Time",
+        state_class=SensorStateClass.TOTAL_INCREASING,
+        device_class=SensorDeviceClass.DURATION,
+        # device_class=SensorDeviceClass.DATE,
+        native_unit_of_measurement="s",
+        icon="mdi:clock-time-eight-outline",
+    ),
 
+    "total_crank_revolution": SensorEntityDescription(
+        key="total_crank_revolution",
+        name="Total Crank Revolutions",
+        state_class=SensorStateClass.MEASUREMENT,
+        icon="mdi:progress-pencil",
+    ),
+    "total_distance": SensorEntityDescription(
+        key="total_distance",
+        name="Total Distance",
+        state_class=SensorStateClass.TOTAL_INCREASING,
+        device_class=SensorDeviceClass.DISTANCE,
+        # native_unit_of_measurement=UnitOfLength.METERS,
+        # native_unit_of_measurement=UnitOfLength.KILOMETERS,
+        # native_unit_of_measurement=km,
+        # suggested_unit_of_measurement="km"
+        icon="mdi:map-marker-distance",
+    ),
+    "total_active_time": SensorEntityDescription(
+        key="total_active_time",
+        name="Total Active Time",
+        state_class=SensorStateClass.TOTAL_INCREASING,
+        device_class=SensorDeviceClass.DURATION,
+        # device_class=SensorDeviceClass.DATE,
+        native_unit_of_measurement="s",
+        icon="mdi:clock-time-eight-outline",
+    ),
     "cscratio": SensorEntityDescription(
         key="cscratio",
         name="Ratio between Crank and Calories",
@@ -159,11 +169,6 @@ SENSORS_MAPPING_TEMPLATE: dict[str, SensorEntityDescription] = {
         state_class=SensorStateClass.MEASUREMENT,
         icon="mdi:dots-grid",
     ),
-    "csctimestamp": SensorEntityDescription(
-        key="csctimestamp",
-        name="csctimestamp",
-        icon="mdi:dots-grid",
-    ),
     "difcsctimestamp": SensorEntityDescription(
         key="difcsctimestamp",
         name="difcsctimestamp",
@@ -171,9 +176,9 @@ SENSORS_MAPPING_TEMPLATE: dict[str, SensorEntityDescription] = {
         icon="mdi:dots-grid",
     ),
 
-    "speed": SensorEntityDescription(
-        key="speed",
-        name="Speed",
+    "current_speed": SensorEntityDescription(
+        key="current_speed",
+        name="Current Speed",
         state_class=SensorStateClass.MEASUREMENT,
         suggested_unit_of_measurement="km/h",
         icon="mdi:speedometer",
