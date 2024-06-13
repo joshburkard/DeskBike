@@ -20,6 +20,12 @@ from bleak import BleakClient, BleakError
 from bleak.backends.device import BLEDevice
 from bleak_retry_connector import establish_connection
 
+from homeassistant.components import bluetooth
+from homeassistant.components.bluetooth import (
+    BluetoothServiceInfo,
+    async_discovered_service_info,
+)
+
 from .const import (
     BATT_100, BATT_0
 )
@@ -218,6 +224,12 @@ class DeskBikeBluetoothDeviceData:
         global _last_crank_revolution
         global _last_save_timestamp
 
+        try:
+            rssi = device.rssi
+            _LOGGER.debug( f"rssi: {rssi}")
+        except Exception as err:
+            _LOGGER.debug(f"error: {err}")
+
         # if ( ( _total_active_time == 0 ) and ( _total_crank_revolution == 0 ) ):
         if _total_crank_revolution == 0:
             _LOGGER.debug("initializing datas")
@@ -333,6 +345,10 @@ class DeskBikeBluetoothDeviceData:
                     dif_crank_revolution = csc_crank_revolution - _last_crank_revolution
                 else:
                     dif_crank_revolution = csc_crank_revolution - _last_crank_revolution + 65536
+
+                if dif_crank_revolution > 50:
+                    dif_crank_revolution = 0
+
                 # device.sensors["csc_dif_crank"] = dif_crank_revolution
                 _last_crank_revolution = csc_crank_revolution
                 _LOGGER.debug( f"dif_crank_revolution:   {dif_crank_revolution}" )
