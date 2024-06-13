@@ -36,3 +36,10 @@ the Deskbike will be detected and added. you will see it like follow:
 now you can create a custom dashboard from its sensors:
 
 ![](/doc/example-04.png)
+
+## open tasks
+
+- optimization of sensors
+  - units
+
+as i'm a python newbie, any support and help will be appreciated.
