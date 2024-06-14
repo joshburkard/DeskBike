@@ -13,6 +13,10 @@ with this integration, you can connect from Home Assistant to the Desk Bike and 
 
 this integration is currently in beta state and i expect issues.
 
+## Prerequisites
+
+you need a bluetooth proxy. i can recommend the [ESP32 - M5 Atom lite](https://shop.m5stack.com/products/atom-lite-esp32-development-kit?ref=NabuCasa), which you can configure and attach to Home Assistant on this [page](https://esphome.io/projects/?type=bluetooth).
+
 ## Installation
 
 create a new folder `deskbike` below `/config/custom_components` and copy all files to that folder or its subfolder.
