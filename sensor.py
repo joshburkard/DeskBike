@@ -96,12 +96,16 @@ SENSORS_MAPPING_TEMPLATE: dict[str, SensorEntityDescription] = {
     "daily_distance": SensorEntityDescription(
         key="daily_distance",
         name="Daily Distance",
-        state_class=SensorStateClass.TOTAL_INCREASING,
+        #state_class=SensorStateClass.TOTAL_INCREASING,
+        #device_class=SensorDeviceClass.DISTANCE,
+
         device_class=SensorDeviceClass.DISTANCE,
+        state_class=SensorStateClass.MEASUREMENT,
         # native_unit_of_measurement=UnitOfLength.METERS,
         # native_unit_of_measurement=UnitOfLength.KILOMETERS,
         # native_unit_of_measurement=km,
-        # suggested_unit_of_measurement="km"
+        suggested_display_precision=1,
+        # suggested_unit_of_measurement="km",
         icon="mdi:map-marker-distance",
     ),
     "daily_active_time": SensorEntityDescription(
@@ -180,7 +184,9 @@ SENSORS_MAPPING_TEMPLATE: dict[str, SensorEntityDescription] = {
         key="current_speed",
         name="Current Speed",
         state_class=SensorStateClass.MEASUREMENT,
-        suggested_unit_of_measurement="km/h",
+        # suggested_unit_of_measurement="km/h",
+        # unit_of_measurement: "km/h"
+        # device_class=SensorDeviceClass.SPEED
         icon="mdi:speedometer",
     ),
 
@@ -211,6 +217,8 @@ async def async_setup_entry(
         entities.append(
             DeskBikeSensor(coordinator, coordinator.data, sensors_mapping[sensor_type])
         )
+
+
 
     async_add_entities(entities)
 

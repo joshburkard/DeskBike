@@ -26,10 +26,6 @@ from homeassistant.components.bluetooth import (
     async_discovered_service_info,
 )
 
-from .const import (
-    BATT_100, BATT_0
-)
-
 global _last_crank_revolution
 global _last_csc_timestamp
 global _last_timestamp

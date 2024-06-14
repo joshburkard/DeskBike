@@ -4,10 +4,7 @@ from homeassistant.core import HomeAssistant
 
 from .parser import DeskBikeBluetoothDeviceData, DeskBikeDevice
 
-__version__ = "0.0.1"
+__version__ = "0.0.5"
 
 __all__ = ["DeskBikeBluetoothDeviceData", "DeskBikeDevice"]
 
-_lastcsc01 = 0
-_lastcsc02 = 0
-# lastcsctime = datetime.now()
