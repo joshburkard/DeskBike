@@ -43,3 +43,74 @@ now you can create a custom dashboard from its sensors:
   - units
 
 as i'm a python newbie, any support and help will be appreciated.
+
+# Dashboard
+
+you can create a dashboard like this:
+
+```
+      - type: custom:canvas-gauge-card
+        entity: sensor.deskbike_xxxxx_current_speed
+        card_height: 250
+        background_color: '#FFF'
+        majorTicksDec: 1
+        gauge:
+          type: radial-gauge
+          title: km/h
+          width: 250
+          height: 250
+          exactTicks: true
+          borderShadowWidth: 5
+          borderOuterWidth: 0
+          borderMiddleWidth: 0
+          borderInnerWidth: 0
+          minValue: 0
+          maxValue: 40
+          startAngle: 45
+          ticksAngle: 270
+          valueBox: true
+          valueInt: 1
+          valueDec: 1
+          majorTicks:
+            - 8
+            - 16
+            - 24
+            - 32
+          minorTicks: 1
+          strokeTicks: true
+          borders: false
+          highlights:
+            - from: 0
+              to: 8
+              color: '#47DF43'
+            - from: 8
+              to: 16
+              color: '#94fe92'
+            - from: 16
+              to: 24
+              color: '#eee780'
+            - from: 24
+              to: 32
+              color: '#F28A5C'
+            - from: 32
+              to: 40
+              color: '#db4437'
+        needle: true
+      - type: entities
+        entities:
+          - entity: sensor.deskbike_xxxxx_daily_distance
+            name: Daily Distance
+          - entity: sensor.deskbike_xxxxx_daily_active_time
+            name: Daily Active Time
+          - entity: sensor.deskbike_xxxxx_daily_crank_revolutions
+            name: Daily Crank Revolutions
+          - entity: sensor.deskbike_xxxxx_total_distance
+            name: Total Distance
+          - entity: sensor.deskbike_xxxxx_total_active_time
+            name: Total Active Time
+          - entity: sensor.deskbike_xxxxx_total_crank_revolutions
+            name: Total Crank Revolutions
+          - entity: sensor.deskbike_xxxxx_battery
+            name: Battery
+
+```
