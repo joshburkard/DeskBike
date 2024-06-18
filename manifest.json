@@ -12,5 +12,5 @@
   "documentation": "https://github.com/joshburkard/DeskBike",
   "iot_class": "local_polling",
   "issue_tracker": "https://github.com/joshburkard/DeskBike/issues",
-  "version": "0.0.6"
+  "version": "0.0.7"
 }
