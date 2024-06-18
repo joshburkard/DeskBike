@@ -324,6 +324,7 @@ class DeskBikeBluetoothDeviceData:
                 if now >= time1 and _last_timestamp <= time1:
                     _daily_crank_revolution = 0
                     _daily_distance = 0
+                    _daily_active_time = 0
                 # end check if it's midnight with a tolerance
 
                 dif_timestamp = now - _last_timestamp
