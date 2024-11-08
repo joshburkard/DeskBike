@@ -1,0 +1,16 @@
+﻿{
+    "domain": "deskbike",
+    "name": "DeskBike",
+    "bluetooth": [
+        {
+            "local_name": "deskbike*",
+            "connectable": true
+        }
+    ],
+    "config_flow": true,
+    "dependencies": ["bluetooth"],
+    "documentation": "https://github.com/joshburkard/DeskBike",
+    "requirements": ["bleak>=0.21.1"],
+    "codeowners": ["@joshburkard"],
+    "version": "0.1.0"
+}
