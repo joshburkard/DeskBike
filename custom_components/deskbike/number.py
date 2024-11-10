@@ -1,4 +1,4 @@
-﻿"""Support for DeskBike number entities."""
+"""Support for DeskBike number entities."""
 from __future__ import annotations
 
 import logging

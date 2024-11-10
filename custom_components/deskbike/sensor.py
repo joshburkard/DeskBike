@@ -1,4 +1,4 @@
-﻿"""Support for DeskBike sensors."""
+"""Support for DeskBike sensors."""
 from __future__ import annotations
 
 import asyncio

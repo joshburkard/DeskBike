@@ -1,4 +1,4 @@
-﻿"""Support for DeskBike binary sensors."""
+"""Support for DeskBike binary sensors."""
 from __future__ import annotations
 
 import logging
