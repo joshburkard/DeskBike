@@ -2,7 +2,7 @@
 
 [![hacs_badge](https://img.shields.io/badge/HACS-Custom-41BDF5.svg)](https://github.com/hacs/integration)
 
-Adds DeskBike support to Home assistant. This integration requires [HACS](https://hacs.xyz).
+Adds [DeskBike](https://deskbike.com/) support to [Home Assistant](https://www.home-assistant.io/). This integration requires [HACS](https://hacs.xyz).
 
 ## Features
 
