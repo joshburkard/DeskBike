@@ -9,8 +9,8 @@ from typing import Any
 
 from bleak import BleakClient
 from homeassistant.components.sensor import (
+    RestoreSensor,
     SensorDeviceClass,
-    SensorEntity,
     SensorEntityDescription,
     SensorStateClass,
 )
@@ -131,7 +131,7 @@ SENSOR_TYPES: tuple[SensorEntityDescription, ...] = (
     ),
 )
 
-class DeskBikeSensor(CoordinatorEntity, SensorEntity):
+class DeskBikeSensor(CoordinatorEntity, RestoreSensor):
     """Representation of a DeskBike sensor."""
 
     def __init__(
@@ -146,11 +146,7 @@ class DeskBikeSensor(CoordinatorEntity, SensorEntity):
         self.entity_description = description
         self._config_entry = config_entry
         self._attr_has_entity_name = True
-
-        # Set unique_id
         self._attr_unique_id = f"{config_entry.data[CONF_ADDRESS]}_{description.key}"
-
-        # Set device info
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, config_entry.data[CONF_ADDRESS])},
             name=config_entry.data[CONF_NAME],
@@ -159,6 +155,33 @@ class DeskBikeSensor(CoordinatorEntity, SensorEntity):
             sw_version=coordinator.device_info.get("firmware_version"),
             hw_version=coordinator.device_info.get("hardware_version"),
         )
+
+    async def async_added_to_hass(self) -> None:
+        """Handle entity which will be added."""
+        await super().async_added_to_hass()
+
+        # Restore previous state for total/cumulative sensors
+        if (last_state := await self.async_get_last_state()) is not None:
+            # Only restore certain sensors that should persist
+            if self.entity_description.key in [
+                "distance",
+                "total_active_time",
+                "total_calories",
+            ]:
+                try:
+                    if last_state.state not in (None, "unknown", "unavailable"):
+                        self.coordinator._data[self.entity_description.key] = float(last_state.state)
+                        _LOGGER.debug(
+                            "Restored %s state: %s",
+                            self.entity_description.key,
+                            last_state.state
+                        )
+                except (ValueError, TypeError) as err:
+                    _LOGGER.warning(
+                        "Could not restore %s state: %s",
+                        self.entity_description.key,
+                        err
+                    )
 
     @property
     def native_value(self) -> float | str | None:
@@ -444,18 +467,6 @@ class DeskBikeDataUpdateCoordinator(DataUpdateCoordinator):
                     await self._client.connect()
                     self._connected = True
                     self._data["is_connected"] = True
-
-                    # Restore saved values
-                    try:
-                        for key in ["distance", "total_active_time", "total_calories"]:
-                            last_state = await self.hass.helpers.restore_state.async_get_last_state(
-                                "sensor",
-                                f"{self.address}_{key}"
-                            )
-                            if last_state is not None and last_state.state.replace(".", "").isdigit():
-                                self._data[key] = float(last_state.state)
-                    except Exception as e:
-                        _LOGGER.debug("Error restoring saved values: %s", e)
 
                     # Read device info and subscribe to notifications
                     try:
