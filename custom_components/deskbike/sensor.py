@@ -43,6 +43,12 @@ from .const import (
     CHAR_SOFTWARE,
     CHAR_BATTERY,
     CHAR_CSC_MEASUREMENT,
+    DEFAULT_WEIGHT,
+    MET_LIGHT,
+    MET_MODERATE,
+    MET_VIGOROUS,
+    MET_VERY_VIGOROUS,
+    MET_RACING,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -109,6 +115,20 @@ SENSOR_TYPES: tuple[SensorEntityDescription, ...] = (
         icon="mdi:timer",
         state_class=SensorStateClass.TOTAL_INCREASING,
     ),
+    SensorEntityDescription(
+        key="daily_calories",
+        name="Daily Calories Burned",
+        native_unit_of_measurement="kcal",
+        icon="mdi:fire",
+        state_class=SensorStateClass.TOTAL_INCREASING,
+    ),
+    SensorEntityDescription(
+        key="total_calories",
+        name="Total Calories Burned",
+        native_unit_of_measurement="kcal",
+        icon="mdi:fire",
+        state_class=SensorStateClass.TOTAL_INCREASING,
+    ),
 )
 
 class DeskBikeSensor(CoordinatorEntity, SensorEntity):
@@ -151,9 +171,9 @@ class DeskBikeSensor(CoordinatorEntity, SensorEntity):
             if isinstance(value, (int, float)):
                 if self.entity_description.key in ["distance", "daily_distance"]:
                     return round(value, 2)
-                elif self.entity_description.key == "speed":
+                elif self.entity_description.key in ["speed", "cadence"]:
                     return round(value, 1)
-                elif self.entity_description.key == "cadence":
+                elif self.entity_description.key in ["daily_calories", "total_calories"]:
                     return round(value, 1)
                 return value
             return value
@@ -202,9 +222,10 @@ class DeskBikeDataUpdateCoordinator(DataUpdateCoordinator):
             hass,
             logger,
             name=name,
-            update_interval=timedelta(seconds=30),  # Regular polling for connection status
+            update_interval=timedelta(seconds=30),
         )
         self.address = address
+        self._weight = DEFAULT_WEIGHT
         self._client: BleakClient | None = None
         self._connected = False
         self.device_info = {}
@@ -227,11 +248,51 @@ class DeskBikeDataUpdateCoordinator(DataUpdateCoordinator):
             "last_active": None,
             "daily_active_time": 0,
             "total_active_time": 0,
+            "daily_calories": 0.0,
+            "total_calories": 0.0,
             "is_active": False,
             "is_connected": False,
         }
         self._connection_lock = asyncio.Lock()
         self._daily_reset_time = dt_util.start_of_local_day()
+
+    @property
+    def weight(self) -> float:
+        """Get the current weight setting."""
+        return self._weight
+
+    @weight.setter
+    def weight(self, value: float) -> None:
+        """Set the current weight setting."""
+        self._weight = value
+
+    def _calculate_calories(self, speed: float, time_diff: float) -> float:
+        """Calculate calories burned based on speed and time.
+
+        Args:
+            speed: Speed in km/h
+            time_diff: Time difference in seconds
+
+        Returns:
+            Calories burned in kcal
+        """
+        # Convert time from seconds to hours
+        hours = time_diff / 3600
+
+        # Select MET based on speed
+        if speed < 16:  # 10 mph
+            met = MET_LIGHT
+        elif speed < 19:  # 12 mph
+            met = MET_MODERATE
+        elif speed < 22.5:  # 14 mph
+            met = MET_VIGOROUS
+        elif speed < 25.7:  # 16 mph
+            met = MET_VERY_VIGOROUS
+        else:
+            met = MET_RACING
+
+        # Calculate calories: MET * weight * time(hours)
+        return met * self.weight * hours
 
     def _check_activity_timeout(self) -> None:
         """Check if device is inactive and reset speed if needed."""
@@ -246,7 +307,7 @@ class DeskBikeDataUpdateCoordinator(DataUpdateCoordinator):
             self._data["cadence"] = 0.0
             self._data["is_active"] = False
 
-            # Just reset the activity start time, but keep the accumulated times
+            # Just reset the activity start time
             self._activity_start_time = None
 
     def _check_daily_reset(self) -> None:
@@ -254,7 +315,8 @@ class DeskBikeDataUpdateCoordinator(DataUpdateCoordinator):
         now = dt_util.now()
         if now > self._daily_reset_time + timedelta(days=1):
             self._data["daily_distance"] = 0.0
-            self._data["daily_active_time"] = 0  # Only reset daily time at midnight
+            self._data["daily_active_time"] = 0
+            self._data["daily_calories"] = 0.0
             self._daily_reset_time = dt_util.start_of_local_day()
 
     def _notification_handler(self, _: int, data: bytearray) -> None:
@@ -319,6 +381,12 @@ class DeskBikeDataUpdateCoordinator(DataUpdateCoordinator):
                 # Always add 1 second to both daily and total time during activity
                 self._data["daily_active_time"] += 1
                 self._data["total_active_time"] += 1
+
+                # Calculate and add calories if speed is available
+                if self._data["speed"] > 0:
+                    calories_burned = self._calculate_calories(self._data["speed"], 1)  # 1 second of activity
+                    self._data["daily_calories"] += calories_burned
+                    self._data["total_calories"] += calories_burned
             else:
                 self._check_activity_timeout()
 
@@ -357,7 +425,7 @@ class DeskBikeDataUpdateCoordinator(DataUpdateCoordinator):
 
                     # Restore saved values
                     try:
-                        for key in ["distance", "total_active_time"]:
+                        for key in ["distance", "total_active_time", "total_calories"]:
                             last_state = await self.hass.helpers.restore_state.async_get_last_state(
                                 "sensor",
                                 f"{self.address}_{key}"
@@ -518,19 +586,7 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up DeskBike sensors based on a config entry."""
-    coordinator = DeskBikeDataUpdateCoordinator(
-        hass,
-        _LOGGER,
-        entry.data[CONF_ADDRESS],
-        entry.data[CONF_NAME],
-    )
-
-    # Ensure first refresh initializes device info
-    try:
-        await coordinator.async_refresh()
-    except Exception as err:
-        _LOGGER.error("Error setting up DeskBike coordinator: %s", err)
-        return
+    coordinator = hass.data[DOMAIN][entry.entry_id]
 
     entities = []
 
