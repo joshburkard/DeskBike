@@ -12,5 +12,5 @@
     "documentation": "https://github.com/joshburkard/DeskBike",
     "requirements": ["bleak>=0.21.1"],
     "codeowners": ["@joshburkard"],
-    "version": "0.1.1"
+    "version": "0.1.2"
 }

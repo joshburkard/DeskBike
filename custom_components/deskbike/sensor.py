@@ -217,7 +217,6 @@ class DeskBikeDataUpdateCoordinator(DataUpdateCoordinator):
         self._last_active = None
         self._daily_distance_date = dt_util.now().date()
         self._activity_start_time = None
-        self._current_session_time = 0
         self._reconnect_task = None
         self._data = {
             "speed": 0.0,
@@ -247,19 +246,15 @@ class DeskBikeDataUpdateCoordinator(DataUpdateCoordinator):
             self._data["cadence"] = 0.0
             self._data["is_active"] = False
 
-            # If we were tracking activity time, add the final segment
-            if self._activity_start_time is not None:
-                activity_duration = (now - self._activity_start_time).total_seconds()
-                self._data["daily_active_time"] += int(activity_duration)
-                self._data["total_active_time"] += int(activity_duration)
-                self._activity_start_time = None
+            # Just reset the activity start time, but keep the accumulated times
+            self._activity_start_time = None
 
     def _check_daily_reset(self) -> None:
         """Check if we need to reset daily values."""
         now = dt_util.now()
         if now > self._daily_reset_time + timedelta(days=1):
             self._data["daily_distance"] = 0.0
-            self._data["daily_active_time"] = 0
+            self._data["daily_active_time"] = 0  # Only reset daily time at midnight
             self._daily_reset_time = dt_util.start_of_local_day()
 
     def _notification_handler(self, _: int, data: bytearray) -> None:
@@ -317,9 +312,13 @@ class DeskBikeDataUpdateCoordinator(DataUpdateCoordinator):
                 self._last_activity_check = now
                 self._data["is_active"] = True
 
-                # Start or continue activity timing
+                # Start or update activity timing
                 if self._activity_start_time is None:
                     self._activity_start_time = now
+
+                # Always add 1 second to both daily and total time during activity
+                self._data["daily_active_time"] += 1
+                self._data["total_active_time"] += 1
             else:
                 self._check_activity_timeout()
 
