@@ -336,12 +336,34 @@ class DeskBikeDataUpdateCoordinator(DataUpdateCoordinator):
                     wheel_event_diff = (wheel_event - self._last_wheel_event) & 0xFFFF
                     if wheel_event_diff > 0:
                         time_diff = wheel_event_diff / 1024.0
-                        rev_diff = wheel_revs - self._last_wheel_rev
+
+                        # Handle wheel revolution counter wrapping
+                        if wheel_revs >= self._last_wheel_rev:
+                            rev_diff = wheel_revs - self._last_wheel_rev
+                        else:
+                            # Counter wrapped around (uint32 max = 4294967295)
+                            rev_diff = (4294967295 - self._last_wheel_rev) + wheel_revs + 1
+
+                        # Sanity check: If rev_diff is unreasonably large, ignore this update
+                        if rev_diff > 1000:  # More than 1000 revolutions in one update is unlikely
+                            _LOGGER.warning(
+                                "Ignoring suspicious wheel revolution difference: %d (previous: %d, current: %d)",
+                                rev_diff, self._last_wheel_rev, wheel_revs
+                            )
+                            self._last_wheel_rev = wheel_revs
+                            self._last_wheel_event = wheel_event
+                            return
+
                         distance = rev_diff * self._wheel_circumference
                         speed = (distance / time_diff) * 3.6
 
                         if speed > 0:
                             activity_detected = True
+
+                        # Apply reasonable limits to speed
+                        if speed > 100:  # 100 km/h is a reasonable upper limit for a bike
+                            _LOGGER.warning("Unrealistic speed calculated: %f km/h, limiting to 100 km/h", speed)
+                            speed = 100.0
 
                         self._data["speed"] = round(speed, 1)
                         distance_km = distance / 1000
