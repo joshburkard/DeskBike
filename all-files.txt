@@ -1,11 +1,220 @@
-﻿"""Support for DeskBike sensors."""
+# custom_components\deskbike\__init__.py
+
+"""The DeskBike integration."""
+from __future__ import annotations
+
+import logging
+from homeassistant.config_entries import ConfigEntry
+from homeassistant.core import HomeAssistant
+from homeassistant.const import Platform
+
+from .const import DOMAIN
+
+PLATFORMS: list[Platform] = [Platform.SENSOR]
+_LOGGER = logging.getLogger(__name__)
+
+async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    """Set up DeskBike from a config entry."""
+    await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+    return True
+
+async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    """Unload a config entry."""
+    unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
+    if unload_ok:
+        hass.data[DOMAIN].pop(entry.entry_id, None)
+    return unload_ok
+
+# custom_components\deskbike\config_flow.py
+
+"""Config flow for DeskBike integration."""
+from __future__ import annotations
+
+import logging
+from typing import Any
+
+import voluptuous as vol
+from bleak import BleakScanner
+from homeassistant import config_entries
+from homeassistant.components.bluetooth import (
+    BluetoothServiceInfoBleak,
+    async_discovered_service_info,
+)
+from homeassistant.const import CONF_ADDRESS, CONF_NAME
+from homeassistant.data_entry_flow import FlowResult
+
+from .const import DEFAULT_NAME, DOMAIN
+
+_LOGGER = logging.getLogger(__name__)
+
+class DeskBikeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
+    """Handle a config flow for DeskBike."""
+
+    VERSION = 1
+
+    def __init__(self) -> None:
+        """Initialize the config flow."""
+        self._discovered_devices: dict[str, BluetoothServiceInfoBleak] = {}
+
+    async def async_step_bluetooth(
+        self, discovery_info: BluetoothServiceInfoBleak
+    ) -> FlowResult:
+        """Handle discovery via bluetooth."""
+        _LOGGER.debug("Discovered BLE device: %s", discovery_info.name)
+
+        # Check if device name starts with "deskbike" (case insensitive)
+        if discovery_info.name and discovery_info.name.lower().startswith("deskbike"):
+            await self.async_set_unique_id(discovery_info.address)
+            self._abort_if_unique_id_configured()
+
+            self._discovered_devices[discovery_info.address] = discovery_info
+            return await self.async_step_user()
+
+        return self.async_abort(reason="not_deskbike_device")
+
+    async def async_step_user(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Handle the user step."""
+        errors = {}
+
+        if user_input is not None:
+            address = user_input[CONF_ADDRESS]
+            await self.async_set_unique_id(address, raise_on_progress=False)
+            return self.async_create_entry(
+                title=user_input[CONF_NAME],
+                data={
+                    CONF_NAME: user_input[CONF_NAME],
+                    CONF_ADDRESS: address,
+                },
+            )
+
+        # Get all discovered Bluetooth devices
+        current_addresses = self._discovered_devices.keys()
+        for discovery_info in async_discovered_service_info(self.hass):
+            if (
+                discovery_info.name
+                and discovery_info.name.lower().startswith("deskbike")
+                and discovery_info.address not in current_addresses
+            ):
+                self._discovered_devices[discovery_info.address] = discovery_info
+
+        if not self._discovered_devices:
+            return self.async_abort(reason="no_devices_found")
+
+        # Create selection list
+        devices = {
+            discovery_info.address: f"{discovery_info.name} ({discovery_info.address})"
+            for discovery_info in self._discovered_devices.values()
+        }
+
+        data_schema = vol.Schema(
+            {
+                vol.Required(CONF_ADDRESS): vol.In(devices),
+                vol.Required(CONF_NAME, default=DEFAULT_NAME): str,
+            }
+        )
+
+        return self.async_show_form(
+            step_id="user",
+            data_schema=data_schema,
+            errors=errors,
+        )
+
+# custom_components\deskbike\const.py
+
+"""Constants for the DeskBike integration."""
+from typing import Final
+
+DOMAIN: Final = "deskbike"
+DEFAULT_NAME: Final = "DeskBike"
+
+# BLE Characteristic UUIDs
+CHAR_PRODUCT_NAME: Final = "00002a00-0000-1000-8000-00805f9b34fb"
+CHAR_DEVICE_NAME: Final = "00002a00-0000-1000-8000-00805f9b34fb"
+CHAR_MODEL_NUMBER: Final = "00002a24-0000-1000-8000-00805f9b34fb"
+CHAR_SERIAL_NUMBER: Final = "00002a25-0000-1000-8000-00805f9b34fb"
+CHAR_FIRMWARE: Final = "00002a26-0000-1000-8000-00805f9b34fb"
+CHAR_HARDWARE: Final = "00002a27-0000-1000-8000-00805f9b34fb"
+CHAR_SOFTWARE: Final = "00002a28-0000-1000-8000-00805f9b34fb"
+CHAR_BATTERY: Final = "00002a19-0000-1000-8000-00805f9b34fb"
+CHAR_CSC_MEASUREMENT: Final = "00002a5b-0000-1000-8000-00805f9b34fb"
+
+# custom_components\deskbike\device.py
+
+"""DeskBike device representation."""
+from __future__ import annotations
+
+from homeassistant.components.sensor import (
+    SensorDeviceClass,
+    SensorEntityDescription,
+)
+from homeassistant.const import (
+    CONF_NAME,
+    PERCENTAGE,
+    LENGTH_KILOMETERS,
+    SPEED_KILOMETERS_PER_HOUR,
+)
+
+SENSOR_TYPES: tuple[SensorEntityDescription, ...] = (
+    SensorEntityDescription(
+        key="speed",
+        name="Speed",
+        native_unit_of_measurement=SPEED_KILOMETERS_PER_HOUR,
+        device_class=SensorDeviceClass.SPEED,
+        icon="mdi:speedometer",
+    ),
+    SensorEntityDescription(
+        key="distance",
+        name="Distance",
+        native_unit_of_measurement=LENGTH_KILOMETERS,
+        device_class=SensorDeviceClass.DISTANCE,
+        icon="mdi:map-marker-distance",
+    ),
+    SensorEntityDescription(
+        key="cadence",
+        name="Cadence",
+        native_unit_of_measurement="rpm",
+        icon="mdi:rotate-right",
+    ),
+    SensorEntityDescription(
+        key="battery",
+        name="Battery",
+        native_unit_of_measurement=PERCENTAGE,
+        device_class=SensorDeviceClass.BATTERY,
+        icon="mdi:battery",
+    ),
+)
+
+# custom_components\deskbike\manifest.json
+
+{
+    "domain": "deskbike",
+    "name": "DeskBike",
+    "bluetooth": [
+        {
+            "local_name": "deskbike*",
+            "connectable": true
+        }
+    ],
+    "config_flow": true,
+    "dependencies": ["bluetooth"],
+    "documentation": "https://github.com/joshburkard/DeskBike",
+    "requirements": ["bleak>=0.21.1"],
+    "codeowners": ["@joshburkard"],
+    "version": "0.1.0"
+}
+
+# custom_components\deskbike\sensor.py
+
+"""Support for DeskBike sensors."""
 from __future__ import annotations
 
 import asyncio
 import logging
 import struct
 from datetime import datetime, timedelta
-from typing import Any
+from typing import Any, Callable
 
 from bleak import BleakClient
 from homeassistant.components.sensor import (
@@ -95,20 +304,6 @@ SENSOR_TYPES: tuple[SensorEntityDescription, ...] = (
         icon="mdi:clock-outline",
         entity_category=EntityCategory.DIAGNOSTIC,
     ),
-    SensorEntityDescription(
-        key="daily_active_time",
-        name="Daily Active Time",
-        native_unit_of_measurement=TIME_SECONDS,
-        icon="mdi:timer-outline",
-        state_class=SensorStateClass.TOTAL_INCREASING,
-    ),
-    SensorEntityDescription(
-        key="total_active_time",
-        name="Total Active Time",
-        native_unit_of_measurement=TIME_SECONDS,
-        icon="mdi:timer",
-        state_class=SensorStateClass.TOTAL_INCREASING,
-    ),
 )
 
 class DeskBikeSensor(CoordinatorEntity, SensorEntity):
@@ -140,6 +335,14 @@ class DeskBikeSensor(CoordinatorEntity, SensorEntity):
             hw_version=coordinator.device_info.get("hardware_version"),
         )
 
+        if description.key in ["battery"]:
+            self._attr_entity_category = EntityCategory.DIAGNOSTIC
+
+        if description.key in ["speed", "cadence"]:
+            self._attr_state_class = SensorStateClass.MEASUREMENT
+        elif description.key in ["distance", "daily_distance"]:
+            self._attr_state_class = SensorStateClass.TOTAL_INCREASING
+
     @property
     def native_value(self) -> float | str | None:
         """Return the state of the sensor."""
@@ -156,7 +359,7 @@ class DeskBikeSensor(CoordinatorEntity, SensorEntity):
                 elif self.entity_description.key == "cadence":
                     return round(value, 1)
                 return value
-            return value
+            return value  # Return as-is for timestamp and other types
         return None
 
 class DeskBikeDiagnosticSensor(DeskBikeSensor):
@@ -177,10 +380,11 @@ class DeskBikeDiagnosticSensor(DeskBikeSensor):
                 key=f"diagnostic_{description.lower().replace(' ', '_')}",
                 name=description,
                 icon="mdi:information",
-                entity_category=EntityCategory.DIAGNOSTIC,
             )
         )
         self._value = value
+        self._attr_entity_category = EntityCategory.DIAGNOSTIC
+        self._attr_has_entity_name = True
 
     @property
     def native_value(self) -> str:
@@ -202,7 +406,7 @@ class DeskBikeDataUpdateCoordinator(DataUpdateCoordinator):
             hass,
             logger,
             name=name,
-            update_interval=timedelta(seconds=30),  # Regular polling for connection status
+            update_interval=None,  # We'll use notifications instead of polling
         )
         self.address = address
         self._client: BleakClient | None = None
@@ -216,9 +420,6 @@ class DeskBikeDataUpdateCoordinator(DataUpdateCoordinator):
         self._last_activity_check = None
         self._last_active = None
         self._daily_distance_date = dt_util.now().date()
-        self._activity_start_time = None
-        self._current_session_time = 0
-        self._reconnect_task = None
         self._data = {
             "speed": 0.0,
             "distance": 0.0,
@@ -226,13 +427,8 @@ class DeskBikeDataUpdateCoordinator(DataUpdateCoordinator):
             "cadence": 0.0,
             "battery": 0,
             "last_active": None,
-            "daily_active_time": 0,
-            "total_active_time": 0,
-            "is_active": False,
-            "is_connected": False,
         }
         self._connection_lock = asyncio.Lock()
-        self._daily_reset_time = dt_util.start_of_local_day()
 
     def _check_activity_timeout(self) -> None:
         """Check if device is inactive and reset speed if needed."""
@@ -241,26 +437,17 @@ class DeskBikeDataUpdateCoordinator(DataUpdateCoordinator):
             self._last_activity_check = now
             return
 
-        # If no activity for 3 seconds, set speed and status to 0
+        # If no activity for 3 seconds, set speed to 0
         if (now - self._last_activity_check).total_seconds() > 3:
             self._data["speed"] = 0.0
             self._data["cadence"] = 0.0
-            self._data["is_active"] = False
-
-            # If we were tracking activity time, add the final segment
-            if self._activity_start_time is not None:
-                activity_duration = (now - self._activity_start_time).total_seconds()
-                self._data["daily_active_time"] += int(activity_duration)
-                self._data["total_active_time"] += int(activity_duration)
-                self._activity_start_time = None
 
     def _check_daily_reset(self) -> None:
-        """Check if we need to reset daily values."""
-        now = dt_util.now()
-        if now > self._daily_reset_time + timedelta(days=1):
+        """Check if we need to reset daily distance."""
+        current_date = dt_util.now().date()
+        if current_date != self._daily_distance_date:
             self._data["daily_distance"] = 0.0
-            self._data["daily_active_time"] = 0
-            self._daily_reset_time = dt_util.start_of_local_day()
+            self._daily_distance_date = current_date
 
     def _notification_handler(self, _: int, data: bytearray) -> None:
         """Handle incoming CSC measurement notifications."""
@@ -271,23 +458,23 @@ class DeskBikeDataUpdateCoordinator(DataUpdateCoordinator):
             offset = 1
 
             activity_detected = False
-            now = dt_util.now()
 
             if wheel_rev_present:
                 wheel_revs, wheel_event = struct.unpack_from("<LH", data, offset)
                 if self._last_wheel_event != 0:
+                    # Calculate speed and distance
                     wheel_event_diff = (wheel_event - self._last_wheel_event) & 0xFFFF
                     if wheel_event_diff > 0:
-                        time_diff = wheel_event_diff / 1024.0
+                        time_diff = wheel_event_diff / 1024.0  # Convert to seconds
                         rev_diff = wheel_revs - self._last_wheel_rev
                         distance = rev_diff * self._wheel_circumference
-                        speed = (distance / time_diff) * 3.6
+                        speed = (distance / time_diff) * 3.6  # Convert m/s to km/h
 
                         if speed > 0:
                             activity_detected = True
 
                         self._data["speed"] = round(speed, 1)
-                        distance_km = distance / 1000
+                        distance_km = distance / 1000  # Convert to km
                         self._data["distance"] = round(self._data["distance"] + distance_km, 2)
                         self._data["daily_distance"] = round(self._data["daily_distance"] + distance_km, 2)
 
@@ -298,11 +485,12 @@ class DeskBikeDataUpdateCoordinator(DataUpdateCoordinator):
             if crank_rev_present:
                 crank_revs, crank_event = struct.unpack_from("<HH", data, offset)
                 if self._last_crank_event != 0:
+                    # Calculate cadence
                     crank_event_diff = (crank_event - self._last_crank_event) & 0xFFFF
                     if crank_event_diff > 0:
-                        time_diff = crank_event_diff / 1024.0
+                        time_diff = crank_event_diff / 1024.0  # Convert to seconds
                         rev_diff = crank_revs - self._last_crank_rev
-                        cadence = (rev_diff / time_diff) * 60
+                        cadence = (rev_diff / time_diff) * 60  # RPM
                         self._data["cadence"] = round(cadence, 1)
                         if cadence > 0:
                             activity_detected = True
@@ -310,16 +498,10 @@ class DeskBikeDataUpdateCoordinator(DataUpdateCoordinator):
                 self._last_crank_rev = crank_revs
                 self._last_crank_event = crank_event
 
-            # Update activity status and timing
             if activity_detected:
-                self._last_active = now
+                self._last_active = dt_util.now()
                 self._data["last_active"] = self._last_active
-                self._last_activity_check = now
-                self._data["is_active"] = True
-
-                # Start or continue activity timing
-                if self._activity_start_time is None:
-                    self._activity_start_time = now
+                self._last_activity_check = dt_util.now()
             else:
                 self._check_activity_timeout()
 
@@ -335,11 +517,11 @@ class DeskBikeDataUpdateCoordinator(DataUpdateCoordinator):
             return
 
         async with self._connection_lock:
-            if self._connected:
+            if self._connected:  # Check again in case connection happened while waiting
                 return
 
             max_retries = 3
-            retry_delay = 2
+            retry_delay = 2  # seconds
 
             for attempt in range(max_retries):
                 try:
@@ -350,34 +532,65 @@ class DeskBikeDataUpdateCoordinator(DataUpdateCoordinator):
                             pass
                         self._client = None
 
-                    self._client = BleakClient(self.address, disconnected_callback=self._handle_disconnection)
+                    self._client = BleakClient(self.address)
+
+                    # Add a small delay before connection attempt
                     await asyncio.sleep(0.5)
+
                     await self._client.connect()
                     self._connected = True
-                    self._data["is_connected"] = True
 
-                    # Restore saved values
+                    # Try to read stored values from Home Assistant
                     try:
-                        for key in ["distance", "total_active_time"]:
-                            last_state = await self.hass.helpers.restore_state.async_get_last_state(
-                                "sensor",
-                                f"{self.address}_{key}"
-                            )
-                            if last_state is not None and last_state.state.replace(".", "").isdigit():
-                                self._data[key] = float(last_state.state)
+                        last_state = await self.hass.helpers.restore_state.async_get_last_state(
+                            "sensor",
+                            f"{self.address}_distance"
+                        )
+                        if last_state is not None:
+                            self._data["distance"] = float(last_state.state)
                     except Exception as e:
-                        _LOGGER.debug("Error restoring saved values: %s", e)
+                        _LOGGER.debug("Error restoring total distance: %s", e)
 
-                    # Read device info and subscribe to notifications
+                    # Read battery level
                     try:
                         battery_bytes = await self._client.read_gatt_char(CHAR_BATTERY)
                         self._data["battery"] = int.from_bytes(battery_bytes, byteorder='little')
                     except Exception as e:
                         _LOGGER.debug("Error reading battery level: %s", e)
 
+                    # Get device information
                     if not self.device_info:
-                        await self._read_device_info()
+                        try:
+                            for char_uuid in [
+                                CHAR_PRODUCT_NAME,
+                                CHAR_DEVICE_NAME,
+                                CHAR_MODEL_NUMBER,
+                                CHAR_SERIAL_NUMBER,
+                                CHAR_FIRMWARE,
+                                CHAR_HARDWARE,
+                                CHAR_SOFTWARE,
+                            ]:
+                                try:
+                                    value = await self._client.read_gatt_char(char_uuid)
+                                    value_str = value.decode('utf-8').strip()
+                                    if char_uuid == CHAR_MODEL_NUMBER:
+                                        self.device_info["model"] = value_str
+                                    elif char_uuid == CHAR_SERIAL_NUMBER:
+                                        self.device_info["serial_number"] = value_str
+                                    elif char_uuid == CHAR_FIRMWARE:
+                                        self.device_info["firmware_version"] = value_str
+                                    elif char_uuid == CHAR_HARDWARE:
+                                        self.device_info["hardware_version"] = value_str
+                                    elif char_uuid == CHAR_SOFTWARE:
+                                        self.device_info["software_version"] = value_str
+                                    elif char_uuid in [CHAR_PRODUCT_NAME, CHAR_DEVICE_NAME]:
+                                        self.device_info["name"] = value_str
+                                except Exception as e:
+                                    _LOGGER.debug("Error reading characteristic %s: %s", char_uuid, e)
+                        except Exception as e:
+                            _LOGGER.warning("Failed to read device info: %s", e)
 
+                    # Subscribe to CSC notifications
                     await self._client.start_notify(
                         CHAR_CSC_MEASUREMENT,
                         self._notification_handler,
@@ -388,7 +601,6 @@ class DeskBikeDataUpdateCoordinator(DataUpdateCoordinator):
 
                 except Exception as e:
                     self._connected = False
-                    self._data["is_connected"] = False
                     if self._client:
                         try:
                             await self._client.disconnect()
@@ -396,7 +608,7 @@ class DeskBikeDataUpdateCoordinator(DataUpdateCoordinator):
                             pass
                         self._client = None
 
-                    if attempt < max_retries - 1:
+                    if attempt < max_retries - 1:  # Don't sleep on the last attempt
                         _LOGGER.warning(
                             "Failed to connect to DeskBike (attempt %d/%d): %s. Retrying in %d seconds...",
                             attempt + 1,
@@ -413,62 +625,6 @@ class DeskBikeDataUpdateCoordinator(DataUpdateCoordinator):
                         )
                         raise
 
-    def _handle_disconnection(self, client: BleakClient) -> None:
-        """Handle disconnection event."""
-        self._connected = False
-        self._data["is_connected"] = False
-        self._data["is_active"] = False
-        self.async_set_updated_data(self._data.copy())
-
-        # Schedule reconnection
-        if self._reconnect_task is None or self._reconnect_task.done():
-            self._reconnect_task = asyncio.create_task(self._async_handle_reconnect())
-
-    async def _async_handle_reconnect(self) -> None:
-        """Handle reconnection attempts."""
-        while not self._connected:
-            try:
-                _LOGGER.info("Attempting to reconnect to DeskBike...")
-                await self._async_connect()
-                if self._connected:
-                    _LOGGER.info("Successfully reconnected to DeskBike")
-                    break
-            except Exception as e:
-                _LOGGER.error("Reconnection attempt failed: %s", e)
-                await asyncio.sleep(5)  # Wait before next attempt
-
-    async def _read_device_info(self) -> None:
-        """Read device information characteristics."""
-        try:
-            for char_uuid in [
-                CHAR_PRODUCT_NAME,
-                CHAR_DEVICE_NAME,
-                CHAR_MODEL_NUMBER,
-                CHAR_SERIAL_NUMBER,
-                CHAR_FIRMWARE,
-                CHAR_HARDWARE,
-                CHAR_SOFTWARE,
-            ]:
-                try:
-                    value = await self._client.read_gatt_char(char_uuid)
-                    value_str = value.decode('utf-8').strip()
-                    if char_uuid == CHAR_MODEL_NUMBER:
-                        self.device_info["model"] = value_str
-                    elif char_uuid == CHAR_SERIAL_NUMBER:
-                        self.device_info["serial_number"] = value_str
-                    elif char_uuid == CHAR_FIRMWARE:
-                        self.device_info["firmware_version"] = value_str
-                    elif char_uuid == CHAR_HARDWARE:
-                        self.device_info["hardware_version"] = value_str
-                    elif char_uuid == CHAR_SOFTWARE:
-                        self.device_info["software_version"] = value_str
-                    elif char_uuid in [CHAR_PRODUCT_NAME, CHAR_DEVICE_NAME]:
-                        self.device_info["name"] = value_str
-                except Exception as e:
-                    _LOGGER.debug("Error reading characteristic %s: %s", char_uuid, e)
-        except Exception as e:
-            _LOGGER.warning("Failed to read device info: %s", e)
-
     async def _async_update_data(self) -> dict[str, Any]:
         """Update data from DeskBike."""
         try:
@@ -477,8 +633,10 @@ class DeskBikeDataUpdateCoordinator(DataUpdateCoordinator):
                     await self._async_connect()
                 except Exception as connect_error:
                     _LOGGER.error("Failed to connect to DeskBike: %s", connect_error)
+                    # Return last known data if we have it
                     if self._data:
                         return self._data
+                    # Otherwise raise the error
                     raise
             return self._data
         except Exception as error:
@@ -499,17 +657,10 @@ class DeskBikeDataUpdateCoordinator(DataUpdateCoordinator):
                 _LOGGER.debug("Error disconnecting: %s", e)
             finally:
                 self._connected = False
-                self._data["is_connected"] = False
                 self._client = None
 
     async def async_shutdown(self) -> None:
         """Shutdown the coordinator."""
-        if self._reconnect_task and not self._reconnect_task.done():
-            self._reconnect_task.cancel()
-            try:
-                await self._reconnect_task
-            except asyncio.CancelledError:
-                pass
         await self._async_disconnect()
         await super().async_shutdown()
 
