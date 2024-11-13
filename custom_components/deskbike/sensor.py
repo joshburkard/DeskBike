@@ -477,7 +477,6 @@ class DeskBikeDataUpdateCoordinator(DataUpdateCoordinator):
             if activity_detected:
                 self._last_active = now
                 self._data["last_active"] = self._last_active
-                self._last_activity_check = now
 
                 if not self._data["is_active"]:
                     self._data["is_active"] = True
@@ -487,10 +486,13 @@ class DeskBikeDataUpdateCoordinator(DataUpdateCoordinator):
                 # Start or update activity timing
                 if self._activity_start_time is None:
                     self._activity_start_time = now
+                else:
+                    # Calculate time difference since last activity check
+                    time_diff = (now - self._last_activity_check).total_seconds()
+                    self._data["daily_active_time"] += time_diff
+                    self._data["total_active_time"] += time_diff
 
-                # Always add 1 second to both daily and total time during activity
-                self._data["daily_active_time"] += 1
-                self._data["total_active_time"] += 1
+                self._last_activity_check = now
 
                 # Calculate and add calories if speed is available
                 if self._data["speed"] > 0:
