@@ -21,14 +21,15 @@ this custom component creates:
     - Total Distance
   - Configurations:
     - Cyclist Weight kg
+    - Resistance %
   - Diagnostics:
-    - Battery
+    - Battery %
     - Firmware Version
     - Hardware Version
     - Is Connected
     - Last Active
     - Model Number
-    - Seriual Number
+    - Serial Number
     - Software Version
 
 ## Setup
@@ -44,4 +45,4 @@ Recommended to be installed via [HACS](https://github.com/hacs/integration)
 
 ## Notes
 
-This custom component was created without any knowledge of Python but with use of Claude AI
+This custom component was created without any knowledge of Python but with use of [Claude AI](https://claude.ai/) and [Microsoft CoPilot](https://copilot.cloud.microsoft/)

@@ -379,6 +379,30 @@ class DeskBikeDataUpdateCoordinator(DataUpdateCoordinator):
             self._data["daily_calories"] = 0.0
             self._daily_reset_time = dt_util.start_of_local_day()
 
+    async def _reload_sensor_values(self):
+        """Reload sensor values."""
+        try:
+            battery_bytes = await self._client.read_gatt_char(CHAR_BATTERY)
+            self._data["battery"] = int.from_bytes(battery_bytes, byteorder='little')
+
+            for char_uuid, key in [
+                (CHAR_MODEL_NUMBER, "model"),
+                (CHAR_SERIAL_NUMBER, "serial_number"),
+                (CHAR_FIRMWARE, "firmware_version"),
+                (CHAR_HARDWARE, "hardware_version"),
+                (CHAR_SOFTWARE, "software_version"),
+            ]:
+                value = await self._client.read_gatt_char(char_uuid)
+                self.device_info[key] = value.decode('utf-8').strip()
+                self._data[key] = self.device_info[key]
+
+            self.async_set_updated_data(self._data.copy())
+
+            # Dynamically add sensors if they were unavailable during setup
+            await self._add_missing_sensors()
+        except Exception as e:
+            _LOGGER.error("Error reloading sensor values: %s", e)
+
     def _notification_handler(self, _: int, data: bytearray) -> None:
         """Handle incoming CSC measurement notifications."""
         try:
@@ -454,7 +478,11 @@ class DeskBikeDataUpdateCoordinator(DataUpdateCoordinator):
                 self._last_active = now
                 self._data["last_active"] = self._last_active
                 self._last_activity_check = now
-                self._data["is_active"] = True
+
+                if not self._data["is_active"]:
+                    self._data["is_active"] = True
+                    # Reload sensor values when activity starts
+                    asyncio.create_task(self._reload_sensor_values())
 
                 # Start or update activity timing
                 if self._activity_start_time is None:
@@ -478,6 +506,49 @@ class DeskBikeDataUpdateCoordinator(DataUpdateCoordinator):
 
         except Exception as e:
             _LOGGER.error("Error processing CSC notification: %s", e)
+
+    async def _save_sensor_values(self):
+        """Save sensor values to Home Assistant storage."""
+        store = self.hass.helpers.storage.Store(1, f"{DOMAIN}_sensor_values_{self.address}")
+        await store.async_save(self._data)
+
+    async def _restore_sensor_values(self):
+        """Restore sensor values from Home Assistant storage."""
+        store = self.hass.helpers.storage.Store(1, f"{DOMAIN}_sensor_values_{self.address}")
+        restored_data = await store.async_load()
+        if restored_data:
+            self._data.update(restored_data)
+            self.device_info.update({
+                "model": restored_data.get("model"),
+                "serial_number": restored_data.get("serial_number"),
+                "firmware_version": restored_data.get("firmware_version"),
+                "hardware_version": restored_data.get("hardware_version"),
+                "software_version": restored_data.get("software_version"),
+            })
+            self.async_set_updated_data(self._data.copy())
+
+    async def _add_missing_sensors(self):
+        """Add missing sensors dynamically."""
+        entities = []
+        for char_name, info_key in [
+            ("Model Number", "model"),
+            ("Serial Number", "serial_number"),
+            ("Firmware Version", "firmware_version"),
+            ("Hardware Version", "hardware_version"),
+            ("Software Version", "software_version"),
+        ]:
+            if info_key in self.device_info and self.device_info[info_key]:
+                entities.append(
+                    DeskBikeDiagnosticSensor(
+                        self,
+                        self._config_entry,
+                        char_name,
+                        self.device_info[info_key]
+                    )
+                )
+        if entities:
+            async_add_entities = self.hass.data[DOMAIN][self._config_entry.entry_id].async_add_entities
+            async_add_entities(entities)
 
     async def _async_connect(self) -> None:
         """Connect to the DeskBike device with retry mechanism."""
@@ -561,6 +632,11 @@ class DeskBikeDataUpdateCoordinator(DataUpdateCoordinator):
         # Schedule reconnection
         if self._reconnect_task is None or self._reconnect_task.done():
             self._reconnect_task = asyncio.create_task(self._async_handle_reconnect())
+
+    async def async_config_entry_first_refresh(self):
+        """Perform the first refresh of the config entry."""
+        await self._restore_sensor_values()
+        await super().async_config_entry_first_refresh()
 
     async def _async_handle_reconnect(self) -> None:
         """Handle reconnection attempts."""
@@ -689,3 +765,8 @@ async def async_setup_entry(
 
     # Store coordinator in hass.data for cleanup
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = coordinator
+
+    # Ensure missing sensors are added dynamically
+    coordinator.hass = hass
+    coordinator._config_entry = entry
+    coordinator.async_add_entities = async_add_entities

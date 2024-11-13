@@ -2,6 +2,7 @@
 
 | Version | Date | Description |
 | --- | --- | --- |
+| 0.1.8 | 13/11/2024 | restore Diagnostic Datas on custom component load from last known state if not available and reload them if reconnected |
 | 0.1.7 | 13/11/2024 | changed display of Daily Active Time and Total Active Time to d.HH:mm:ss |
 | 0.1.6 | 13/11/2024 | restore add number slider for resistance percentage |
 | 0.1.5 | 10/11/2024 | restore sensor status after custom component reload / update |
