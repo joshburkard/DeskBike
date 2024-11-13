@@ -4,6 +4,7 @@ from typing import Final
 DOMAIN: Final = "deskbike"
 DEFAULT_NAME: Final = "DeskBike"
 DEFAULT_WEIGHT: Final = 70.0  # Default weight in kg
+DEFAULT_RESISTANCE: Final = 75.0  # Default resistance level
 
 # BLE Characteristic UUIDs
 CHAR_PRODUCT_NAME: Final = "00002a00-0000-1000-8000-00805f9b34fb"

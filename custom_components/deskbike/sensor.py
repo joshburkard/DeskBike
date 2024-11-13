@@ -44,6 +44,7 @@ from .const import (
     CHAR_BATTERY,
     CHAR_CSC_MEASUREMENT,
     DEFAULT_WEIGHT,
+    DEFAULT_RESISTANCE,
     MET_LIGHT,
     MET_MODERATE,
     MET_VIGOROUS,
@@ -249,6 +250,7 @@ class DeskBikeDataUpdateCoordinator(DataUpdateCoordinator):
         )
         self.address = address
         self._weight = DEFAULT_WEIGHT
+        self._resistance = DEFAULT_RESISTANCE
         self._client: BleakClient | None = None
         self._connected = False
         self.device_info = {}
@@ -289,7 +291,17 @@ class DeskBikeDataUpdateCoordinator(DataUpdateCoordinator):
         """Set the current weight setting."""
         self._weight = value
 
-    def _calculate_calories(self, speed: float, time_diff: float) -> float:
+    @property
+    def resistance(self) -> float:
+        """Get the current resistance setting."""
+        return self._resistance
+
+    @resistance.setter
+    def resistance(self, value: float) -> None:
+        """Set the current resistance setting."""
+        self._resistance = value
+
+    def _calculate_calories(self, speed: float, time_diff: float, resistance: int) -> float:
         """Calculate calories burned based on speed and time.
 
         Args:
@@ -314,8 +326,8 @@ class DeskBikeDataUpdateCoordinator(DataUpdateCoordinator):
         else:
             met = MET_RACING
 
-        # Calculate calories: MET * weight * time(hours)
-        return met * self.weight * hours
+        # Calculate calories: MET * weight * time(hours) * resistance %
+        return met * self.weight * hours * resistance / 100
 
     def _check_activity_timeout(self) -> None:
         """Check if device is inactive and reset speed if needed."""
@@ -429,7 +441,8 @@ class DeskBikeDataUpdateCoordinator(DataUpdateCoordinator):
 
                 # Calculate and add calories if speed is available
                 if self._data["speed"] > 0:
-                    calories_burned = self._calculate_calories(self._data["speed"], 1)  # 1 second of activity
+                    resistance = self._resistance  # Assuming resistance is stored in the coordinator
+                    calories_burned = self._calculate_calories(self._data["speed"], 1, resistance)  # 1 second of activity
                     self._data["daily_calories"] += calories_burned
                     self._data["total_calories"] += calories_burned
             else:

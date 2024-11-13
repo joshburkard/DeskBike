@@ -13,7 +13,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity import DeviceInfo, EntityCategory
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .const import DOMAIN, DEFAULT_WEIGHT
+from .const import DOMAIN, DEFAULT_WEIGHT, DEFAULT_RESISTANCE
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -25,7 +25,7 @@ async def async_setup_entry(
     """Set up DeskBike number entities."""
     _LOGGER.debug("Setting up DeskBike number entities")
     coordinator = hass.data[DOMAIN][entry.entry_id]
-    async_add_entities([DeskBikeWeightSetting(coordinator, entry)])
+    async_add_entities([DeskBikeWeightSetting(coordinator, entry), DeskBikeResistanceSetting(coordinator, entry)])
 
 class DeskBikeWeightSetting(RestoreNumber):
     """Representation of the cyclist weight setting."""
@@ -43,9 +43,9 @@ class DeskBikeWeightSetting(RestoreNumber):
         self._attr_native_step = 0.5
         self._attr_mode = "slider"
         self._attr_native_unit_of_measurement = MASS_KILOGRAMS
-        self._attr_name = "Cyclist Weight kg"
+        self._attr_name = "Weight"
         self._attr_entity_category = EntityCategory.CONFIG
-        self._attr_icon = "mdi:human-male"
+        self._attr_icon = "mdi:weight"
 
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, entry.data[CONF_ADDRESS])},
@@ -78,4 +78,54 @@ class DeskBikeWeightSetting(RestoreNumber):
     async def async_set_native_value(self, value: float) -> None:
         """Update the current weight setting."""
         self.coordinator.weight = value
+        self.async_write_ha_state()
+
+class DeskBikeResistanceSetting(RestoreNumber):
+    """Representation of the cyclist resistance setting."""
+
+    def __init__(self, coordinator, entry: ConfigEntry) -> None:
+        """Initialize the resistance setting."""
+        super().__init__()
+        self.coordinator = coordinator
+        self._entry = entry
+        self._attr_unique_id = f"{entry.data[CONF_ADDRESS]}_resistance"
+        self._attr_has_entity_name = True
+        self._attr_native_min_value = 1
+        self._attr_native_max_value = 100
+        self._attr_native_step = 1
+        self._attr_mode = "slider"
+        self._attr_native_unit_of_measurement = "%"
+        self._attr_name = "Resistance"
+        self._attr_entity_category = EntityCategory.CONFIG
+        self._attr_icon = "mdi:gauge"
+        self._attr_device_info = DeviceInfo(
+            identifiers={(DOMAIN, entry.data[CONF_ADDRESS])},
+            name=entry.data[CONF_NAME],
+            manufacturer="DeskBike",
+            model=coordinator.device_info.get("model", "DeskBike"),
+            sw_version=coordinator.device_info.get("firmware_version"),
+            hw_version=coordinator.device_info.get("hardware_version"),
+        )
+
+    async def async_added_to_hass(self) -> None:
+        """Run when entity about to be added to hass."""
+        await super().async_added_to_hass()
+        # Restore previous state
+        if last_state := await self.async_get_last_state():
+            try:
+                restored_value = float(last_state.state)
+                self.coordinator.resistance = restored_value
+                _LOGGER.debug("Restored resistance value: %s", restored_value)
+            except (ValueError, TypeError):
+                self.coordinator.resistance = DEFAULT_RESISTANCE
+                _LOGGER.debug("Using default resistance: %s", DEFAULT_RESISTANCE)
+
+    @property
+    def native_value(self) -> float:
+        """Return the current resistance setting."""
+        return self.coordinator.resistance
+
+    async def async_set_native_value(self, value: float) -> None:
+        """Update the current resistance setting."""
+        self.coordinator.resistance = value
         self.async_write_ha_state()
