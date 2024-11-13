@@ -105,14 +105,12 @@ SENSOR_TYPES: tuple[SensorEntityDescription, ...] = (
     SensorEntityDescription(
         key="daily_active_time",
         name="Daily Active Time",
-        native_unit_of_measurement=TIME_SECONDS,
         icon="mdi:timer-outline",
         state_class=SensorStateClass.TOTAL_INCREASING,
     ),
     SensorEntityDescription(
         key="total_active_time",
         name="Total Active Time",
-        native_unit_of_measurement=TIME_SECONDS,
         icon="mdi:timer",
         state_class=SensorStateClass.TOTAL_INCREASING,
     ),
@@ -131,6 +129,24 @@ SENSOR_TYPES: tuple[SensorEntityDescription, ...] = (
         state_class=SensorStateClass.TOTAL_INCREASING,
     ),
 )
+
+def format_seconds_to_time(seconds: int) -> str:
+    """Format seconds to d.HH:mm:ss format."""
+    if seconds is None:
+        return None
+
+    days = seconds // (24 * 3600)
+    remaining = seconds % (24 * 3600)
+    hours = remaining // 3600
+    remaining %= 3600
+    minutes = remaining // 60
+    remaining %= 60
+
+    if days > 0:
+        result = f"{days}.{hours:02d}:{minutes:02d}:{remaining:02d}"
+    else:
+        result = f"{hours:02d}:{minutes:02d}:{remaining:02d}"
+    return result
 
 class DeskBikeSensor(CoordinatorEntity, RestoreSensor):
     """Representation of a DeskBike sensor."""
@@ -192,6 +208,7 @@ class DeskBikeSensor(CoordinatorEntity, RestoreSensor):
 
         value = self.coordinator.data.get(self.entity_description.key)
         if value is not None:
+
             if isinstance(value, (int, float)):
                 if self.entity_description.key in ["distance", "daily_distance"]:
                     return round(value, 2)
@@ -202,6 +219,14 @@ class DeskBikeSensor(CoordinatorEntity, RestoreSensor):
                 return value
             return value
         return None
+
+    @property
+    def state(self) -> str | None:
+        """Return the state of the sensor."""
+        if self.entity_description.key in ["daily_active_time", "total_active_time"]:
+            if self.native_value is not None:
+                return format_seconds_to_time(int(self.native_value))
+        return str(self.native_value) if self.native_value is not None else None
 
 class DeskBikeDiagnosticSensor(DeskBikeSensor):
     """Representation of a DeskBike diagnostic sensor."""
