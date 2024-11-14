@@ -323,6 +323,61 @@ class DeskBikeDataUpdateCoordinator(DataUpdateCoordinator):
         self._connection_lock = asyncio.Lock()
         self._daily_reset_time = dt_util.start_of_local_day()
 
+        # List of persistent sensors that should be saved/restored
+        self._persistent_sensors = [
+            "total_active_time",
+            "total_crank_rotations",
+            "distance",  # Also preserve total distance
+            "total_calories"  # And total calories
+        ]
+
+    async def _save_persistent_data(self) -> None:
+        """Save persistent sensor values."""
+        persistent_data = {
+            key: self._data[key]
+            for key in self._persistent_sensors
+            if key in self._data
+        }
+
+        # Add version information to track data structure changes
+        persistent_data["_version"] = "1.0"
+        persistent_data["_last_updated"] = dt_util.utcnow().isoformat()
+
+        try:
+            store = self.hass.helpers.storage.Store(
+                version=1,
+                key=f"{DOMAIN}_persistent_data_{self.address}",
+                private=True,
+                atomic_writes=True
+            )
+            await store.async_save(persistent_data)
+            _LOGGER.debug("Saved persistent data: %s", persistent_data)
+        except Exception as err:
+            _LOGGER.error("Error saving persistent data: %s", err)
+
+    async def _restore_persistent_data(self) -> None:
+        """Restore persistent sensor values."""
+        try:
+            store = self.hass.helpers.storage.Store(
+                version=1,
+                key=f"{DOMAIN}_persistent_data_{self.address}",
+                private=True
+            )
+            stored_data = await store.async_load()
+
+            if stored_data:
+                # Check version compatibility if needed
+                stored_version = stored_data.get("_version", "0.0")
+                _LOGGER.debug("Restoring persistent data from version %s", stored_version)
+
+                # Restore each persistent sensor value
+                for key in self._persistent_sensors:
+                    if key in stored_data:
+                        self._data[key] = stored_data[key]
+                        _LOGGER.debug("Restored %s = %s", key, stored_data[key])
+        except Exception as err:
+            _LOGGER.error("Error restoring persistent data: %s", err)
+
     @property
     def weight(self) -> float:
         """Get the current weight setting."""
@@ -563,6 +618,11 @@ class DeskBikeDataUpdateCoordinator(DataUpdateCoordinator):
             })
             self.async_set_updated_data(self._data.copy())
 
+    async def async_setup(self) -> None:
+        """Set up the coordinator."""
+        await self._restore_persistent_data()
+
+
     async def _add_missing_sensors(self):
         """Add missing sensors dynamically."""
         entities = []
@@ -730,6 +790,12 @@ class DeskBikeDataUpdateCoordinator(DataUpdateCoordinator):
                     if self._data:
                         return self._data
                     raise
+            # Save persistent data periodically (every 5 minutes)
+            now = dt_util.utcnow()
+            if not hasattr(self, '_last_save') or (now - self._last_save > timedelta(minutes=5)):
+                await self._save_persistent_data()
+                self._last_save = now
+
             return self._data
         except Exception as error:
             await self._async_disconnect()

@@ -2,6 +2,7 @@
 
 | Version | Date | Description |
 | --- | --- | --- |
+| 0.1.12 | 14/11/2024 | preserve Total datas for version update and custom component reload |
 | 0.1.11 | 14/11/2024 | added sensors Daily Crank Rotations and Total Crank Rotations |
 | 0.1.10 | 14/11/2024 | adjusted some logging |
 | 0.1.9 | 13/11/2024 | fixed Active Time calculation |
