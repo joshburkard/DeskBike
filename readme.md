@@ -8,19 +8,19 @@ Instead of opening each time your [DeskBike](https://deskbike.com/) App on the m
 
 ## Features
 
-this custom component creates:15
+this custom component creates:
 
 - A device in [Home Assistant](https://www.home-assistant.io/) for monitor a [DeskBike](https://deskbike.com/) with:
   - this sensors:
-    - Cadence
-    - Daily Active Time
-    - Daily Calories Burned
-    - Daily Distance
+    - Cadence (rpm)
+    - Daily Active Time (hh:mm:ss)
+    - Daily Calories Burned (kcal)
+    - Daily Distance (km)
     - Is Active
-    - Speed
-    - Total Active Time
-    - Total Calories Burned
-    - Total Distance
+    - Speed (kmh)
+    - Total Active Time (d.hh:mm:ss)
+    - Total Calories Burned (kcal)
+    - Total Distance (km)
   - Configurations:
     - Cyclist Weight kg
     - Resistance %
