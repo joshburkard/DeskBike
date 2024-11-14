@@ -225,12 +225,15 @@ class DeskBikeSensor(CoordinatorEntity, RestoreSensor):
         if value is not None:
 
             if isinstance(value, (int, float)):
-                if self.entity_description.key in ["distance", "daily_distance"]:
+                if self.entity_description.key in ["daily_distance"]:
                     return round(value, 2)
+                elif self.entity_description.key in ["distance"]:
+                    return round(value, 1)
                 elif self.entity_description.key in ["speed", "cadence"]:
                     return round(value, 1)
                 elif self.entity_description.key in ["daily_calories", "total_calories"]:
                     return round(value, 1)
+
                 return value
             return value
         return None
@@ -492,40 +495,36 @@ class DeskBikeDataUpdateCoordinator(DataUpdateCoordinator):
                 if self._last_wheel_event != 0:
                     wheel_event_diff = (wheel_event - self._last_wheel_event) & 0xFFFF
                     if wheel_event_diff > 0:
+                        # Calculate time difference
                         time_diff = wheel_event_diff / 1024.0
 
                         # Handle wheel revolution counter wrapping
                         if wheel_revs >= self._last_wheel_rev:
-                            rev_diff = wheel_revs - self._last_wheel_rev
+                            wheel_rev_diff  = wheel_revs - self._last_wheel_rev
                         else:
                             # Counter wrapped around (uint32 max = 4294967295)
-                            rev_diff = (4294967295 - self._last_wheel_rev) + wheel_revs + 1
+                            wheel_rev_diff  = (4294967295 - self._last_wheel_rev) + wheel_revs + 1
 
-                        # Sanity check: If rev_diff is unreasonably large, ignore this update
-                        if rev_diff > 1000:  # More than 1000 revolutions in one update is unlikely
+                        # Sanity check: If wheel_rev_diff  is unreasonably large, ignore this update
+                        if wheel_rev_diff  > 1000:  # More than 1000 revolutions in one update is unlikely
                             _LOGGER.warning(
                                 "Ignoring suspicious wheel revolution difference: %d (previous: %d, current: %d)",
-                                rev_diff, self._last_wheel_rev, wheel_revs
+                                wheel_rev_diff , self._last_wheel_rev, wheel_revs
                             )
                             self._last_wheel_rev = wheel_revs
                             self._last_wheel_event = wheel_event
                             return
+                        else:
+                            distance = wheel_rev_diff  * self._wheel_circumference # in meters
+                            speed = (distance / time_diff) * 3.6
 
-                        distance = rev_diff * self._wheel_circumference
-                        speed = (distance / time_diff) * 3.6
-
-                        if speed > 0:
-                            activity_detected = True
-
-                        # Apply reasonable limits to speed
-                        if speed > 100:  # 100 km/h is a reasonable upper limit for a bike
-                            _LOGGER.warning("Unrealistic speed calculated: %f km/h, limiting to 100 km/h", speed)
-                            speed = 100.0
-
-                        self._data["speed"] = round(speed, 1)
-                        distance_km = distance / 1000
-                        self._data["distance"] = round(self._data["distance"] + distance_km, 2)
-                        self._data["daily_distance"] = round(self._data["daily_distance"] + distance_km, 2)
+                            # Update sensors if speed is reasonable
+                            if 0 <= speed <= 100:  # Reasonable speed range for a bike
+                                self._data["speed"] = round(speed, 1)
+                                distance_km = distance / 1000
+                                self._data["distance"] += distance_km
+                                self._data["daily_distance"] += distance_km
+                                activity_detected = True
 
                 self._last_wheel_rev = wheel_revs
                 self._last_wheel_event = wheel_event
