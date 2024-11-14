@@ -2,6 +2,7 @@
 
 | Version | Date | Description |
 | --- | --- | --- |
+| 0.1.10 | 14/11/2024 | adjusted some logging |
 | 0.1.9 | 13/11/2024 | fixed Active Time calculation |
 | 0.1.8 | 13/11/2024 | restore Diagnostic Datas on custom component load from last known state if not available and reload them if reconnected |
 | 0.1.7 | 13/11/2024 | changed display of Daily Active Time and Total Active Time to d.HH:mm:ss |

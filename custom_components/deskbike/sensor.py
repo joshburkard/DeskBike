@@ -194,7 +194,7 @@ class DeskBikeSensor(CoordinatorEntity, RestoreSensor):
                             last_state.state
                         )
                 except (ValueError, TypeError) as err:
-                    _LOGGER.warning(
+                    _LOGGER.debug(
                         "Could not restore %s state: %s",
                         self.entity_description.key,
                         err
@@ -401,7 +401,7 @@ class DeskBikeDataUpdateCoordinator(DataUpdateCoordinator):
             # Dynamically add sensors if they were unavailable during setup
             await self._add_missing_sensors()
         except Exception as e:
-            _LOGGER.error("Error reloading sensor values: %s", e)
+            _LOGGER.debug("Error reloading sensor values: %s", e)
 
     def _notification_handler(self, _: int, data: bytearray) -> None:
         """Handle incoming CSC measurement notifications."""
@@ -608,7 +608,7 @@ class DeskBikeDataUpdateCoordinator(DataUpdateCoordinator):
                         self._client = None
 
                     if attempt < max_retries - 1:
-                        _LOGGER.warning(
+                        _LOGGER.debug(
                             "Failed to connect to DeskBike (attempt %d/%d): %s. Retrying in %d seconds...",
                             attempt + 1,
                             max_retries,
@@ -617,7 +617,7 @@ class DeskBikeDataUpdateCoordinator(DataUpdateCoordinator):
                         )
                         await asyncio.sleep(retry_delay)
                     else:
-                        _LOGGER.error(
+                        _LOGGER.debug(
                             "Failed to connect to DeskBike after %d attempts: %s",
                             max_retries,
                             str(e)
@@ -644,13 +644,13 @@ class DeskBikeDataUpdateCoordinator(DataUpdateCoordinator):
         """Handle reconnection attempts."""
         while not self._connected:
             try:
-                _LOGGER.info("Attempting to reconnect to DeskBike...")
+                _LOGGER.debug("Attempting to reconnect to DeskBike...")
                 await self._async_connect()
                 if self._connected:
                     _LOGGER.info("Successfully reconnected to DeskBike")
                     break
             except Exception as e:
-                _LOGGER.error("Reconnection attempt failed: %s", e)
+                _LOGGER.debug("Reconnection attempt failed: %s", e)
                 await asyncio.sleep(5)  # Wait before next attempt
 
     async def _read_device_info(self) -> None:
@@ -683,7 +683,7 @@ class DeskBikeDataUpdateCoordinator(DataUpdateCoordinator):
                 except Exception as e:
                     _LOGGER.debug("Error reading characteristic %s: %s", char_uuid, e)
         except Exception as e:
-            _LOGGER.warning("Failed to read device info: %s", e)
+            _LOGGER.debug("Failed to read device info: %s", e)
 
     async def _async_update_data(self) -> dict[str, Any]:
         """Update data from DeskBike."""
@@ -692,7 +692,7 @@ class DeskBikeDataUpdateCoordinator(DataUpdateCoordinator):
                 try:
                     await self._async_connect()
                 except Exception as connect_error:
-                    _LOGGER.error("Failed to connect to DeskBike: %s", connect_error)
+                    _LOGGER.debug("Failed to connect to DeskBike: %s", connect_error)
                     if self._data:
                         return self._data
                     raise
