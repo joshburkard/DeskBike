@@ -15,11 +15,13 @@ this custom component creates:
     - Cadence (rpm)
     - Daily Active Time (hh:mm:ss)
     - Daily Calories Burned (kcal)
+    - Daily Crank Rotations
     - Daily Distance (km)
     - Is Active
     - Speed (kmh)
     - Total Active Time (d.hh:mm:ss)
     - Total Calories Burned (kcal)
+    - Total Crank Rotations
     - Total Distance (km)
   - Configurations:
     - Cyclist Weight kg
@@ -61,6 +63,10 @@ Recommended to be installed via [HACS](https://github.com/hacs/integration)
 9. use your [DeskBike](https://deskbike.com) after the restart, it should be automatically detected
 10. add it to [Home Assistant](https://www.home-assistant.io/)
 11. use it
+
+## Configuration
+
+Configure your ouwn weight and the resistance has an impact on the calculation of the burned calories.
 
 ## Notes
 
