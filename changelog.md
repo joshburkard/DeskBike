@@ -2,6 +2,7 @@
 
 | Version | Date | Description |
 | --- | --- | --- |
+| 0.1.11 | 14/11/2024 | added sensors Daily Crank Rotations and Total Crank Rotations |
 | 0.1.10 | 14/11/2024 | adjusted some logging |
 | 0.1.9 | 13/11/2024 | fixed Active Time calculation |
 | 0.1.8 | 13/11/2024 | restore Diagnostic Datas on custom component load from last known state if not available and reload them if reconnected |

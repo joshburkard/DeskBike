@@ -128,6 +128,20 @@ SENSOR_TYPES: tuple[SensorEntityDescription, ...] = (
         icon="mdi:fire",
         state_class=SensorStateClass.TOTAL_INCREASING,
     ),
+    SensorEntityDescription(
+        key="daily_crank_rotations",
+        name="Daily Crank Rotations",
+        native_unit_of_measurement="",
+        icon="mdi:rotate-right",
+        state_class=SensorStateClass.TOTAL_INCREASING,
+    ),
+    SensorEntityDescription(
+        key="total_crank_rotations",
+        name="Total Crank Rotations",
+        native_unit_of_measurement="",
+        icon="mdi:rotate-right",
+        state_class=SensorStateClass.TOTAL_INCREASING,
+    ),
 )
 
 def format_seconds_to_time(seconds: int) -> str:
@@ -184,6 +198,7 @@ class DeskBikeSensor(CoordinatorEntity, RestoreSensor):
                 "distance",
                 "total_active_time",
                 "total_calories",
+                "total_crank_rotations",
             ]:
                 try:
                     if last_state.state not in (None, "unknown", "unavailable"):
@@ -302,6 +317,8 @@ class DeskBikeDataUpdateCoordinator(DataUpdateCoordinator):
             "total_calories": 0.0,
             "is_active": False,
             "is_connected": False,
+            "daily_crank_rotations": 0,
+            "total_crank_rotations": 0,
         }
         self._connection_lock = asyncio.Lock()
         self._daily_reset_time = dt_util.start_of_local_day()
@@ -377,6 +394,7 @@ class DeskBikeDataUpdateCoordinator(DataUpdateCoordinator):
             self._data["daily_distance"] = 0.0
             self._data["daily_active_time"] = 0
             self._data["daily_calories"] = 0.0
+            self._data["daily_crank_rotations"] = 0  # Reset daily crank rotations
             self._daily_reset_time = dt_util.start_of_local_day()
 
     async def _reload_sensor_values(self):
@@ -463,9 +481,25 @@ class DeskBikeDataUpdateCoordinator(DataUpdateCoordinator):
                 if self._last_crank_event != 0:
                     crank_event_diff = (crank_event - self._last_crank_event) & 0xFFFF
                     if crank_event_diff > 0:
+                        # Calculate revolution difference
+                        if crank_revs >= self._last_crank_rev:
+                            crank_rev_diff = crank_revs - self._last_crank_rev
+                        else:
+                            # Handle counter wrap-around (uint16 max = 65535)
+                            crank_rev_diff = (65535 - self._last_crank_rev) + crank_revs + 1
+
+                        # Update rotation counters if the difference is reasonable
+                        if crank_rev_diff < 100:  # Sanity check: limit to 100 revolutions per update
+                            self._data["daily_crank_rotations"] += crank_rev_diff
+                            self._data["total_crank_rotations"] += crank_rev_diff
+                        else:
+                            _LOGGER.warning(
+                                "Ignoring suspicious crank revolution difference: %d (previous: %d, current: %d)",
+                                crank_rev_diff, self._last_crank_rev, crank_revs
+                            )
+
                         time_diff = crank_event_diff / 1024.0
-                        rev_diff = crank_revs - self._last_crank_rev
-                        cadence = (rev_diff / time_diff) * 60
+                        cadence = (crank_rev_diff / time_diff) * 60
                         self._data["cadence"] = round(cadence, 1)
                         if cadence > 0:
                             activity_detected = True
