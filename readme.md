@@ -36,6 +36,8 @@ this custom component creates:
     - Serial Number
     - Software Version
 
+![Alt text](doc/printscreen.png)
+
 ## Requirements
 
 This integration requires:
