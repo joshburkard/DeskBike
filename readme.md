@@ -43,11 +43,11 @@ this custom component creates:
 This integration requires:
 
 - [Home Assistant](https://www.home-assistant.io/)
-- [DeskBike](https://deskbike.com)
-- [Deskbike Bluetooth Sensor](https://deskbike.com/en/product/deskbike-app-fiets-tracker-bluetooth-cadence-sensor/), this is sometimes part of the DeskBike package.
+- a [DeskBike](https://deskbike.com)
+- a [Deskbike Bluetooth Sensor](https://deskbike.com/en/product/deskbike-app-fiets-tracker-bluetooth-cadence-sensor/), this is sometimes part of the DeskBike package.
 - [HACS](https://hacs.xyz)
-- a Bluetooth adapter
-  - i use with a network connected [M5Stack Atom Lite](https://shop.m5stack.com/products/atom-lite-esp32-development-kit) configured as [Bluetooth Proxy](https://esphome.io/projects/index.html)
+- a Bluetooth adapter, which is already connected to [Home Assistant](https://www.home-assistant.io/)
+  - i use a network connected [M5Stack Atom Lite](https://shop.m5stack.com/products/atom-lite-esp32-development-kit) configured as [Bluetooth Proxy](https://esphome.io/projects/index.html)
   - other adapters will work, too
 
 ## Setup
