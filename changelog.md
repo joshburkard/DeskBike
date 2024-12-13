@@ -2,6 +2,7 @@
 
 | Version | Date | Description |
 | --- | --- | --- |
+| 0.1.14 | 13/12/2024 | fix issue with reconnect after integration reload and added MAC address to device info |
 | 0.1.13 | 14/11/2024 | fix issue with distance calculation |
 | 0.1.12 | 14/11/2024 | preserve Total datas for version update and custom component reload |
 | 0.1.11 | 14/11/2024 | added sensors Daily Crank Rotations and Total Crank Rotations |

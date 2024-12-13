@@ -185,6 +185,7 @@ class DeskBikeSensor(CoordinatorEntity, RestoreSensor):
             model=coordinator.device_info.get("model", "DeskBike"),
             sw_version=coordinator.device_info.get("firmware_version"),
             hw_version=coordinator.device_info.get("hardware_version"),
+            connections={("bluetooth", config_entry.data[CONF_ADDRESS])},
         )
 
     async def async_added_to_hass(self) -> None:
@@ -296,7 +297,9 @@ class DeskBikeDataUpdateCoordinator(DataUpdateCoordinator):
         self._resistance = DEFAULT_RESISTANCE
         self._client: BleakClient | None = None
         self._connected = False
-        self.device_info = {}
+        self.device_info = {
+            "mac_address": address  # Add MAC address to device_info
+        }
         self._last_wheel_rev = 0
         self._last_wheel_event = 0
         self._last_crank_rev = 0
@@ -307,6 +310,8 @@ class DeskBikeDataUpdateCoordinator(DataUpdateCoordinator):
         self._daily_distance_date = dt_util.now().date()
         self._activity_start_time = None
         self._reconnect_task = None
+        self._last_connection_attempt = None
+        self._connection_retry_interval = timedelta(minutes=1)  # Retry every minute
         self._data = {
             "speed": 0.0,
             "distance": 0.0,
@@ -647,6 +652,15 @@ class DeskBikeDataUpdateCoordinator(DataUpdateCoordinator):
 
     async def _async_connect(self) -> None:
         """Connect to the DeskBike device with retry mechanism."""
+        now = dt_util.utcnow()
+
+        # Check if we should attempt reconnection based on the retry interval
+        if (self._last_connection_attempt and
+            now - self._last_connection_attempt < self._connection_retry_interval):
+            return
+
+        self._last_connection_attempt = now
+
         if self._connected:
             return
 
@@ -786,9 +800,10 @@ class DeskBikeDataUpdateCoordinator(DataUpdateCoordinator):
                     await self._async_connect()
                 except Exception as connect_error:
                     _LOGGER.debug("Failed to connect to DeskBike: %s", connect_error)
-                    if self._data:
-                        return self._data
-                    raise
+                    # Return existing data but don't raise an exception
+                    # This allows the coordinator to keep running and retry connections
+                    return self._data
+
             # Save persistent data periodically (every 5 minutes)
             now = dt_util.utcnow()
             if not hasattr(self, '_last_save') or (now - self._last_save > timedelta(minutes=5)):
@@ -851,6 +866,7 @@ async def async_setup_entry(
             ("Firmware Version", "firmware_version"),
             ("Hardware Version", "hardware_version"),
             ("Software Version", "software_version"),
+            ("MAC Address", "mac_address"),
         ]:
             if info_key in device_info and device_info[info_key]:
                 entities.append(
