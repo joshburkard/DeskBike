@@ -311,7 +311,7 @@ class DeskBikeDataUpdateCoordinator(DataUpdateCoordinator):
         self._activity_start_time = None
         self._reconnect_task = None
         self._last_connection_attempt = None
-        self._connection_retry_interval = timedelta(minutes=1)  # Retry every minute
+        self._retry_interval = timedelta(minutes=1)  # Fixed 1-minute retry interval
         self._data = {
             "speed": 0.0,
             "distance": 0.0,
@@ -338,6 +338,42 @@ class DeskBikeDataUpdateCoordinator(DataUpdateCoordinator):
             "distance",  # Also preserve total distance
             "total_calories"  # And total calories
         ]
+        self._connection_timeout = 2.0  # 2 seconds for initial connection
+        self._operation_timeout = 1.0   # 1 second for GATT operations
+        self._disconnect_timeout = 1.0  # 1 second for disconnection
+
+        # Add new tracking variables
+        self._last_activity_time = None
+        self._activity_timeout = timedelta(minutes=30)  # Consider device inactive after 30 minutes
+        self._force_reconnect = False  # Flag to force reconnection attempt
+        self._connection_attempts = 0
+        self._max_connection_attempts = 3  # Max attempts before requiring activity
+
+    def _should_attempt_connection(self) -> bool:
+        """Determine if connection attempt should be made."""
+        now = dt_util.utcnow()
+
+        # Always attempt if forced reconnect is set
+        if self._force_reconnect:
+            self._force_reconnect = False  # Reset flag
+            self._connection_attempts = 0   # Reset counter
+            return True
+
+        # If we're already connected, no need to attempt
+        if self._connected:
+            return False
+
+        # If we have recent activity, attempt connection
+        if self._last_activity_time and (now - self._last_activity_time) < self._activity_timeout:
+            return True
+
+        # If we haven't exceeded max attempts, try anyway
+        if self._connection_attempts < self._max_connection_attempts:
+            self._connection_attempts += 1
+            return True
+
+        # Otherwise, don't attempt connection
+        return False
 
     async def _save_persistent_data(self) -> None:
         """Save persistent sensor values."""
@@ -487,6 +523,9 @@ class DeskBikeDataUpdateCoordinator(DataUpdateCoordinator):
     def _notification_handler(self, _: int, data: bytearray) -> None:
         """Handle incoming CSC measurement notifications."""
         try:
+            # Update activity timestamp when we receive data
+            self._last_activity_time = dt_util.utcnow()
+
             flags = data[0]
             wheel_rev_present = bool(flags & 0x01)
             crank_rev_present = bool(flags & 0x02)
@@ -602,6 +641,11 @@ class DeskBikeDataUpdateCoordinator(DataUpdateCoordinator):
         except Exception as e:
             _LOGGER.error("Error processing CSC notification: %s", e)
 
+    async def force_reconnect(self) -> None:
+        """Force a reconnection attempt regardless of activity state."""
+        self._force_reconnect = True
+        await self.async_refresh()
+
     async def _save_sensor_values(self):
         """Save sensor values to Home Assistant storage."""
         store = self.hass.helpers.storage.Store(1, f"{DOMAIN}_sensor_values_{self.address}")
@@ -625,7 +669,6 @@ class DeskBikeDataUpdateCoordinator(DataUpdateCoordinator):
     async def async_setup(self) -> None:
         """Set up the coordinator."""
         await self._restore_persistent_data()
-
 
     async def _add_missing_sensors(self):
         """Add missing sensors dynamically."""
@@ -651,85 +694,66 @@ class DeskBikeDataUpdateCoordinator(DataUpdateCoordinator):
             async_add_entities(entities)
 
     async def _async_connect(self) -> None:
-        """Connect to the DeskBike device with retry mechanism."""
-        now = dt_util.utcnow()
-
-        # Check if we should attempt reconnection based on the retry interval
-        if (self._last_connection_attempt and
-            now - self._last_connection_attempt < self._connection_retry_interval):
-            return
-
-        self._last_connection_attempt = now
-
-        if self._connected:
+        """Connect to the DeskBike device with smarter connection management."""
+        if not self._should_attempt_connection():
             return
 
         async with self._connection_lock:
             if self._connected:
                 return
 
-            max_retries = 3
-            retry_delay = 2
-
-            for attempt in range(max_retries):
-                try:
-                    if self._client:
-                        try:
-                            await self._client.disconnect()
-                        except Exception:
-                            pass
-                        self._client = None
-
-                    self._client = BleakClient(self.address, disconnected_callback=self._handle_disconnection)
-                    await asyncio.sleep(0.5)
-                    await self._client.connect()
-                    self._connected = True
-                    self._data["is_connected"] = True
-
-                    # Read device info and subscribe to notifications
+            try:
+                if self._client:
                     try:
-                        battery_bytes = await self._client.read_gatt_char(CHAR_BATTERY)
-                        self._data["battery"] = int.from_bytes(battery_bytes, byteorder='little')
-                    except Exception as e:
-                        _LOGGER.debug("Error reading battery level: %s", e)
+                        await asyncio.wait_for(self._client.disconnect(), timeout=2.0)
+                    except (Exception, asyncio.TimeoutError):
+                        pass
+                    self._client = None
 
-                    if not self.device_info:
-                        await self._read_device_info()
+                self._client = BleakClient(
+                    self.address,
+                    disconnected_callback=self._handle_disconnection,
+                    timeout=5.0
+                )
 
-                    await self._client.start_notify(
+                await asyncio.wait_for(self._client.connect(), timeout=5.0)
+                self._connected = True
+                self._data["is_connected"] = True
+                self._connection_attempts = 0  # Reset counter on successful connection
+
+                try:
+                    battery_read = await asyncio.wait_for(
+                        self._client.read_gatt_char(CHAR_BATTERY),
+                        timeout=3.0
+                    )
+                    self._data["battery"] = int.from_bytes(battery_read, byteorder='little')
+                except (Exception, asyncio.TimeoutError) as e:
+                    _LOGGER.debug("Error reading battery level: %s", e)
+
+                if not self.device_info:
+                    await self._read_device_info()
+
+                await asyncio.wait_for(
+                    self._client.start_notify(
                         CHAR_CSC_MEASUREMENT,
                         self._notification_handler,
-                    )
+                    ),
+                    timeout=3.0
+                )
 
-                    _LOGGER.info("Connected to DeskBike")
-                    return
+                _LOGGER.info("Connected to DeskBike")
 
-                except Exception as e:
-                    self._connected = False
-                    self._data["is_connected"] = False
-                    if self._client:
-                        try:
-                            await self._client.disconnect()
-                        except Exception:
-                            pass
-                        self._client = None
+            except Exception as e:
+                self._cleanup_connection()
+                _LOGGER.debug("Connection attempt failed: %s", str(e))
+                raise
 
-                    if attempt < max_retries - 1:
-                        _LOGGER.debug(
-                            "Failed to connect to DeskBike (attempt %d/%d): %s. Retrying in %d seconds...",
-                            attempt + 1,
-                            max_retries,
-                            str(e),
-                            retry_delay
-                        )
-                        await asyncio.sleep(retry_delay)
-                    else:
-                        _LOGGER.debug(
-                            "Failed to connect to DeskBike after %d attempts: %s",
-                            max_retries,
-                            str(e)
-                        )
-                        raise
+    def _cleanup_connection(self) -> None:
+        """Clean up the connection state."""
+        self._connected = False
+        self._data["is_connected"] = False
+        if self._client:
+            self._client = None
 
     def _handle_disconnection(self, client: BleakClient) -> None:
         """Handle disconnection event."""
@@ -738,9 +762,11 @@ class DeskBikeDataUpdateCoordinator(DataUpdateCoordinator):
         self._data["is_active"] = False
         self.async_set_updated_data(self._data.copy())
 
-        # Schedule reconnection
-        if self._reconnect_task is None or self._reconnect_task.done():
-            self._reconnect_task = asyncio.create_task(self._async_handle_reconnect())
+        # Only schedule reconnection if we have recent activity
+        if (self._last_activity_time and
+            (dt_util.utcnow() - self._last_activity_time) < self._activity_timeout):
+            if self._reconnect_task is None or self._reconnect_task.done():
+                self._reconnect_task = asyncio.create_task(self._async_handle_reconnect())
 
     async def async_config_entry_first_refresh(self):
         """Perform the first refresh of the config entry."""
@@ -761,7 +787,7 @@ class DeskBikeDataUpdateCoordinator(DataUpdateCoordinator):
                 await asyncio.sleep(5)  # Wait before next attempt
 
     async def _read_device_info(self) -> None:
-        """Read device information characteristics."""
+        """Read device information characteristics with timeouts."""
         try:
             for char_uuid in [
                 CHAR_PRODUCT_NAME,
@@ -773,7 +799,10 @@ class DeskBikeDataUpdateCoordinator(DataUpdateCoordinator):
                 CHAR_SOFTWARE,
             ]:
                 try:
-                    value = await self._client.read_gatt_char(char_uuid)
+                    value = await asyncio.wait_for(
+                        self._client.read_gatt_char(char_uuid),
+                        timeout=3.0
+                    )
                     value_str = value.decode('utf-8').strip()
                     if char_uuid == CHAR_MODEL_NUMBER:
                         self.device_info["model"] = value_str
@@ -787,7 +816,7 @@ class DeskBikeDataUpdateCoordinator(DataUpdateCoordinator):
                         self.device_info["software_version"] = value_str
                     elif char_uuid in [CHAR_PRODUCT_NAME, CHAR_DEVICE_NAME]:
                         self.device_info["name"] = value_str
-                except Exception as e:
+                except (Exception, asyncio.TimeoutError) as e:
                     _LOGGER.debug("Error reading characteristic %s: %s", char_uuid, e)
         except Exception as e:
             _LOGGER.debug("Failed to read device info: %s", e)
@@ -795,16 +824,14 @@ class DeskBikeDataUpdateCoordinator(DataUpdateCoordinator):
     async def _async_update_data(self) -> dict[str, Any]:
         """Update data from DeskBike."""
         try:
-            if not self._connected:
+            if not self._connected and self._should_attempt_connection():
                 try:
                     await self._async_connect()
                 except Exception as connect_error:
-                    _LOGGER.debug("Failed to connect to DeskBike: %s", connect_error)
-                    # Return existing data but don't raise an exception
-                    # This allows the coordinator to keep running and retry connections
+                    _LOGGER.debug("Connection attempt failed: %s", connect_error)
                     return self._data
 
-            # Save persistent data periodically (every 5 minutes)
+            # Save persistent data periodically
             now = dt_util.utcnow()
             if not hasattr(self, '_last_save') or (now - self._last_save > timedelta(minutes=5)):
                 await self._save_persistent_data()
@@ -812,8 +839,8 @@ class DeskBikeDataUpdateCoordinator(DataUpdateCoordinator):
 
             return self._data
         except Exception as error:
-            await self._async_disconnect()
-            raise Exception(f"Error fetching DeskBike data: {error}")
+            _LOGGER.debug("Error fetching DeskBike data: %s", error)
+            return self._data
 
     async def _async_disconnect(self) -> None:
         """Disconnect from the DeskBike device."""
@@ -866,7 +893,6 @@ async def async_setup_entry(
             ("Firmware Version", "firmware_version"),
             ("Hardware Version", "hardware_version"),
             ("Software Version", "software_version"),
-            ("MAC Address", "mac_address"),
         ]:
             if info_key in device_info and device_info[info_key]:
                 entities.append(
