@@ -297,21 +297,37 @@ class DeskBikeDataUpdateCoordinator(DataUpdateCoordinator):
         self._resistance = DEFAULT_RESISTANCE
         self._client: BleakClient | None = None
         self._connected = False
-        self.device_info = {
-            "mac_address": address  # Add MAC address to device_info
-        }
+        self.device_info = {}
         self._last_wheel_rev = 0
         self._last_wheel_event = 0
         self._last_crank_rev = 0
         self._last_crank_event = 0
-        self._wheel_circumference = 2.096  # Meters - typical 700c wheel
+        self._wheel_circumference = 2.096
         self._last_activity_check = None
         self._last_active = None
-        self._daily_distance_date = dt_util.now().date()
         self._activity_start_time = None
         self._reconnect_task = None
         self._last_connection_attempt = None
-        self._retry_interval = timedelta(minutes=1)  # Fixed 1-minute retry interval
+        self._retry_interval = timedelta(minutes=1)
+        self._connection_lock = asyncio.Lock()
+        self._force_reconnect = False  # Add this flag
+
+        # Define sensors
+        self._daily_sensors = [
+            "daily_distance",
+            "daily_active_time",
+            "daily_calories",
+            "daily_crank_rotations"
+        ]
+
+        self._persistent_sensors = [
+            "total_active_time",
+            "total_crank_rotations",
+            "distance",
+            "total_calories"
+        ]
+
+        # Initialize data structure
         self._data = {
             "speed": 0.0,
             "distance": 0.0,
@@ -328,26 +344,8 @@ class DeskBikeDataUpdateCoordinator(DataUpdateCoordinator):
             "daily_crank_rotations": 0,
             "total_crank_rotations": 0,
         }
-        self._connection_lock = asyncio.Lock()
-        self._daily_reset_time = dt_util.start_of_local_day()
 
-        # List of persistent sensors that should be saved/restored
-        self._persistent_sensors = [
-            "total_active_time",
-            "total_crank_rotations",
-            "distance",  # Also preserve total distance
-            "total_calories"  # And total calories
-        ]
-        self._connection_timeout = 2.0  # 2 seconds for initial connection
-        self._operation_timeout = 1.0   # 1 second for GATT operations
-        self._disconnect_timeout = 1.0  # 1 second for disconnection
-
-        # Add new tracking variables
-        self._last_activity_time = None
-        self._activity_timeout = timedelta(minutes=30)  # Consider device inactive after 30 minutes
-        self._force_reconnect = False  # Flag to force reconnection attempt
-        self._connection_attempts = 0
-        self._max_connection_attempts = 3  # Max attempts before requiring activity
+        self._last_saved_daily_values = None
 
     def _should_attempt_connection(self) -> bool:
         """Determine if connection attempt should be made."""
@@ -376,18 +374,41 @@ class DeskBikeDataUpdateCoordinator(DataUpdateCoordinator):
         return False
 
     async def _save_persistent_data(self) -> None:
-        """Save persistent sensor values."""
-        persistent_data = {
-            key: self._data[key]
-            for key in self._persistent_sensors
-            if key in self._data
-        }
-
-        # Add version information to track data structure changes
-        persistent_data["_version"] = "1.0"
-        persistent_data["_last_updated"] = dt_util.utcnow().isoformat()
-
+        """Save persistent sensor values including daily values."""
         try:
+            # Don't save if we haven't properly initialized yet
+            if any(self._data[key] is None for key in self._daily_sensors + self._persistent_sensors):
+                _LOGGER.debug("Skipping save as not all values are initialized yet")
+                return
+
+            current_date = dt_util.now().date().isoformat()
+
+            daily_data = {
+                key: self._data[key]
+                for key in self._daily_sensors
+            }
+
+            persistent_data = {
+                "daily_values": {
+                    "date": current_date,
+                    "values": daily_data
+                },
+                "last_daily_reset": self._daily_reset_time.isoformat(),
+                "_version": "1.0",
+                "_last_updated": dt_util.utcnow().isoformat()
+            }
+
+            # Add regular persistent values
+            for key in self._persistent_sensors:
+                persistent_data[key] = self._data[key]
+
+            _LOGGER.debug(
+                "Saving persistent data - Daily values: %s, Date: %s, Reset time: %s",
+                daily_data,
+                current_date,
+                self._daily_reset_time.isoformat()
+            )
+
             store = self.hass.helpers.storage.Store(
                 version=1,
                 key=f"{DOMAIN}_persistent_data_{self.address}",
@@ -395,12 +416,11 @@ class DeskBikeDataUpdateCoordinator(DataUpdateCoordinator):
                 atomic_writes=True
             )
             await store.async_save(persistent_data)
-            _LOGGER.debug("Saved persistent data: %s", persistent_data)
         except Exception as err:
             _LOGGER.error("Error saving persistent data: %s", err)
 
     async def _restore_persistent_data(self) -> None:
-        """Restore persistent sensor values."""
+        """Restore persistent sensor values including daily values."""
         try:
             store = self.hass.helpers.storage.Store(
                 version=1,
@@ -409,16 +429,62 @@ class DeskBikeDataUpdateCoordinator(DataUpdateCoordinator):
             )
             stored_data = await store.async_load()
 
-            if stored_data:
-                # Check version compatibility if needed
-                stored_version = stored_data.get("_version", "0.0")
-                _LOGGER.debug("Restoring persistent data from version %s", stored_version)
+            _LOGGER.debug("Loaded stored data: %s", stored_data)
 
-                # Restore each persistent sensor value
+            if stored_data:
+                current_date = dt_util.now().date().isoformat()
+
+                # Restore regular persistent values
                 for key in self._persistent_sensors:
                     if key in stored_data:
                         self._data[key] = stored_data[key]
-                        _LOGGER.debug("Restored %s = %s", key, stored_data[key])
+                        _LOGGER.debug("Restored persistent value %s = %s", key, stored_data[key])
+
+                # Handle daily values
+                if "daily_values" in stored_data:
+                    stored_date = stored_data["daily_values"]["date"]
+                    _LOGGER.debug(
+                        "Checking daily values - Stored date: %s, Current date: %s",
+                        stored_date,
+                        current_date
+                    )
+
+                    if stored_date == current_date:
+                        for key, value in stored_data["daily_values"]["values"].items():
+                            self._data[key] = value
+                            _LOGGER.debug("Restored daily value %s = %s", key, value)
+                    else:
+                        _LOGGER.debug(
+                            "Daily values from different date (stored: %s, current: %s), resetting to 0",
+                            stored_date,
+                            current_date
+                        )
+                        for key in self._daily_sensors:
+                            self._data[key] = 0.0
+                            _LOGGER.debug("Reset daily value %s to 0", key)
+
+                # Restore last reset time
+                if "last_daily_reset" in stored_data:
+                    try:
+                        self._daily_reset_time = dt_util.parse_datetime(stored_data["last_daily_reset"])
+                        _LOGGER.debug("Restored daily reset time: %s", self._daily_reset_time)
+                    except Exception as err:
+                        _LOGGER.error("Error parsing stored reset time: %s", err)
+                        self._daily_reset_time = dt_util.start_of_local_day()
+                else:
+                    self._daily_reset_time = dt_util.start_of_local_day()
+                    _LOGGER.debug("Using default daily reset time: %s", self._daily_reset_time)
+
+            else:
+                _LOGGER.debug("No stored data found, using default values")
+                self._daily_reset_time = dt_util.start_of_local_day()
+                for key in self._daily_sensors:
+                    self._data[key] = 0.0
+
+            _LOGGER.debug("Final data after restore: %s", {
+                key: self._data[key] for key in self._daily_sensors
+            })
+
         except Exception as err:
             _LOGGER.error("Error restoring persistent data: %s", err)
 
@@ -489,12 +555,23 @@ class DeskBikeDataUpdateCoordinator(DataUpdateCoordinator):
     def _check_daily_reset(self) -> None:
         """Check if we need to reset daily values."""
         now = dt_util.now()
+        _LOGGER.debug(
+            "Checking daily reset - Current time: %s, Last reset: %s",
+            now,
+            self._daily_reset_time
+        )
+
         if now > self._daily_reset_time + timedelta(days=1):
-            self._data["daily_distance"] = 0.0
-            self._data["daily_active_time"] = 0
-            self._data["daily_calories"] = 0.0
-            self._data["daily_crank_rotations"] = 0  # Reset daily crank rotations
+            _LOGGER.debug(
+                "Performing daily reset. Old values: %s",
+                {key: self._data[key] for key in self._daily_sensors}
+            )
+            for key in self._daily_sensors:
+                self._data[key] = 0.0
             self._daily_reset_time = dt_util.start_of_local_day()
+            # Save the reset state
+            asyncio.create_task(self._save_persistent_data())
+            _LOGGER.debug("Daily values reset completed")
 
     async def _reload_sensor_values(self):
         """Reload sensor values."""
@@ -638,13 +715,38 @@ class DeskBikeDataUpdateCoordinator(DataUpdateCoordinator):
             self._check_daily_reset()
             self.async_set_updated_data(self._data.copy())
 
+            # Save current state periodically if values changed
+            if self._data != self._last_saved_daily_values:
+                self._last_saved_daily_values = self._data.copy()
+                asyncio.create_task(self._save_persistent_data())
         except Exception as e:
             _LOGGER.error("Error processing CSC notification: %s", e)
 
     async def force_reconnect(self) -> None:
-        """Force a reconnection attempt regardless of activity state."""
-        self._force_reconnect = True
-        await self.async_refresh()
+        """Force a reconnection attempt."""
+        _LOGGER.debug("Forcing reconnection to DeskBike")
+
+        # Clean up existing connection if any
+        if self._client:
+            try:
+                await self._async_disconnect()
+            except Exception as e:
+                _LOGGER.debug("Error during disconnect: %s", e)
+
+        # Reset connection state
+        self._connected = False
+        self._data["is_connected"] = False
+        self._client = None
+        self._force_reconnect = True  # Set the flag
+
+        # Force a new connection attempt immediately
+        try:
+            await self._async_connect()
+        except Exception as e:
+            _LOGGER.debug("Force reconnect connect attempt failed: %s", e)
+
+        # Trigger a data refresh
+        self.async_set_updated_data(self._data)
 
     async def _save_sensor_values(self):
         """Save sensor values to Home Assistant storage."""
@@ -668,7 +770,19 @@ class DeskBikeDataUpdateCoordinator(DataUpdateCoordinator):
 
     async def async_setup(self) -> None:
         """Set up the coordinator."""
+        _LOGGER.debug("Starting coordinator setup")
+
+        # First restore any saved data
         await self._restore_persistent_data()
+
+        # Now initialize any missing values to 0
+        for key in self._daily_sensors + self._persistent_sensors:
+            if self._data[key] is None:
+                self._data[key] = 0.0
+                _LOGGER.debug("Initialized missing value %s to 0", key)
+
+        _LOGGER.debug("Coordinator setup complete with data: %s",
+                     {key: self._data[key] for key in self._daily_sensors + self._persistent_sensors})
 
     async def _add_missing_sensors(self):
         """Add missing sensors dynamically."""
@@ -694,8 +808,20 @@ class DeskBikeDataUpdateCoordinator(DataUpdateCoordinator):
             async_add_entities(entities)
 
     async def _async_connect(self) -> None:
-        """Connect to the DeskBike device with smarter connection management."""
-        if not self._should_attempt_connection():
+        """Connect to the DeskBike device."""
+        now = dt_util.utcnow()
+
+        # Check if we should attempt reconnection
+        if not self._force_reconnect and (
+            self._last_connection_attempt and
+            now - self._last_connection_attempt < self._retry_interval
+        ):
+            return
+
+        self._last_connection_attempt = now
+        self._force_reconnect = False  # Reset the flag
+
+        if self._connected:
             return
 
         async with self._connection_lock:
@@ -719,8 +845,8 @@ class DeskBikeDataUpdateCoordinator(DataUpdateCoordinator):
                 await asyncio.wait_for(self._client.connect(), timeout=5.0)
                 self._connected = True
                 self._data["is_connected"] = True
-                self._connection_attempts = 0  # Reset counter on successful connection
 
+                # Read device info and subscribe to notifications
                 try:
                     battery_read = await asyncio.wait_for(
                         self._client.read_gatt_char(CHAR_BATTERY),
@@ -741,11 +867,11 @@ class DeskBikeDataUpdateCoordinator(DataUpdateCoordinator):
                     timeout=3.0
                 )
 
-                _LOGGER.info("Connected to DeskBike")
+                _LOGGER.debug("Connected to DeskBike")
+                return
 
             except Exception as e:
                 self._cleanup_connection()
-                _LOGGER.debug("Connection attempt failed: %s", str(e))
                 raise
 
     def _cleanup_connection(self) -> None:
@@ -780,7 +906,7 @@ class DeskBikeDataUpdateCoordinator(DataUpdateCoordinator):
                 _LOGGER.debug("Attempting to reconnect to DeskBike...")
                 await self._async_connect()
                 if self._connected:
-                    _LOGGER.info("Successfully reconnected to DeskBike")
+                    _LOGGER.debug("Successfully reconnected to DeskBike")
                     break
             except Exception as e:
                 _LOGGER.debug("Reconnection attempt failed: %s", e)

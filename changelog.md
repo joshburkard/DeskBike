@@ -2,6 +2,7 @@
 
 | Version | Date | Description |
 | --- | --- | --- |
+| 0.1.00016 | 16/12/2024 | preserve daily values to be usable after integration restart |
 | 0.1.00015 | 16/12/2024 | fix issue with high load after fixing reconnection issue |
 | 0.1.00014 | 13/12/2024 | fix issue with reconnect after integration reload and added MAC address to device info |
 | 0.1.00013 | 14/11/2024 | fix issue with distance calculation |
