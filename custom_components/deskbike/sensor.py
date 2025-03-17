@@ -19,9 +19,8 @@ from homeassistant.const import (
     CONF_ADDRESS,
     CONF_NAME,
     PERCENTAGE,
-    LENGTH_KILOMETERS,
-    SPEED_KILOMETERS_PER_HOUR,
-    TIME_SECONDS,
+    UnitOfLength,
+    UnitOfSpeed,
 )
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity import DeviceInfo, EntityCategory
@@ -30,6 +29,7 @@ from homeassistant.helpers.update_coordinator import (
     CoordinatorEntity,
     DataUpdateCoordinator,
 )
+from homeassistant.helpers.storage import Store
 from homeassistant.util import dt as dt_util
 
 from .const import (
@@ -58,7 +58,7 @@ SENSOR_TYPES: tuple[SensorEntityDescription, ...] = (
     SensorEntityDescription(
         key="speed",
         name="Speed",
-        native_unit_of_measurement=SPEED_KILOMETERS_PER_HOUR,
+        native_unit_of_measurement=UnitOfSpeed.KILOMETERS_PER_HOUR,
         device_class=SensorDeviceClass.SPEED,
         icon="mdi:speedometer",
         state_class=SensorStateClass.MEASUREMENT,
@@ -66,7 +66,7 @@ SENSOR_TYPES: tuple[SensorEntityDescription, ...] = (
     SensorEntityDescription(
         key="distance",
         name="Total Distance",
-        native_unit_of_measurement=LENGTH_KILOMETERS,
+        native_unit_of_measurement=UnitOfLength.KILOMETERS,
         device_class=SensorDeviceClass.DISTANCE,
         icon="mdi:map-marker-distance",
         state_class=SensorStateClass.TOTAL_INCREASING,
@@ -74,7 +74,7 @@ SENSOR_TYPES: tuple[SensorEntityDescription, ...] = (
     SensorEntityDescription(
         key="daily_distance",
         name="Daily Distance",
-        native_unit_of_measurement=LENGTH_KILOMETERS,
+        native_unit_of_measurement=UnitOfLength.KILOMETERS,
         device_class=SensorDeviceClass.DISTANCE,
         icon="mdi:map-marker-distance",
         state_class=SensorStateClass.TOTAL_INCREASING,
@@ -409,11 +409,12 @@ class DeskBikeDataUpdateCoordinator(DataUpdateCoordinator):
                 self._daily_reset_time.isoformat()
             )
 
-            store = self.hass.helpers.storage.Store(
+            store = Store(
+                hass=self.hass,
                 version=1,
                 key=f"{DOMAIN}_persistent_data_{self.address}",
                 private=True,
-                atomic_writes=True
+                atomic_writes=True,
             )
             await store.async_save(persistent_data)
         except Exception as err:
@@ -422,7 +423,8 @@ class DeskBikeDataUpdateCoordinator(DataUpdateCoordinator):
     async def _restore_persistent_data(self) -> None:
         """Restore persistent sensor values including daily values."""
         try:
-            store = self.hass.helpers.storage.Store(
+            store = Store(
+                hass=self.hass,
                 version=1,
                 key=f"{DOMAIN}_persistent_data_{self.address}",
                 private=True
@@ -750,12 +752,12 @@ class DeskBikeDataUpdateCoordinator(DataUpdateCoordinator):
 
     async def _save_sensor_values(self):
         """Save sensor values to Home Assistant storage."""
-        store = self.hass.helpers.storage.Store(1, f"{DOMAIN}_sensor_values_{self.address}")
+        store = Store(self.hass, 1, f"{DOMAIN}_sensor_values_{self.address}")
         await store.async_save(self._data)
 
     async def _restore_sensor_values(self):
         """Restore sensor values from Home Assistant storage."""
-        store = self.hass.helpers.storage.Store(1, f"{DOMAIN}_sensor_values_{self.address}")
+        store = Store(self.hass, 1, f"{DOMAIN}_sensor_values_{self.address}")
         restored_data = await store.async_load()
         if restored_data:
             self._data.update(restored_data)

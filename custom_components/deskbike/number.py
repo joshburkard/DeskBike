@@ -3,12 +3,10 @@ from __future__ import annotations
 
 import logging
 from homeassistant.components.number import (
-    NumberEntity,
-    NumberEntityDescription,
     RestoreNumber,
 )
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import MASS_KILOGRAMS, CONF_NAME, CONF_ADDRESS
+from homeassistant.const import UnitOfMass, CONF_NAME, CONF_ADDRESS
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity import DeviceInfo, EntityCategory
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
@@ -42,7 +40,7 @@ class DeskBikeWeightSetting(RestoreNumber):
         self._attr_native_max_value = 150
         self._attr_native_step = 0.5
         self._attr_mode = "slider"
-        self._attr_native_unit_of_measurement = MASS_KILOGRAMS
+        self._attr_native_unit_of_measurement = UnitOfMass.KILOGRAMS
         self._attr_name = "Weight"
         self._attr_entity_category = EntityCategory.CONFIG
         self._attr_icon = "mdi:weight"
