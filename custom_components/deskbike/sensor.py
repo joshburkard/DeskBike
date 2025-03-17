@@ -19,9 +19,8 @@ from homeassistant.const import (
     CONF_ADDRESS,
     CONF_NAME,
     PERCENTAGE,
-    LENGTH_KILOMETERS,
-    SPEED_KILOMETERS_PER_HOUR,
-    TIME_SECONDS,
+    UnitOfLength,
+    UnitOfSpeed,
 )
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity import DeviceInfo, EntityCategory
@@ -58,7 +57,7 @@ SENSOR_TYPES: tuple[SensorEntityDescription, ...] = (
     SensorEntityDescription(
         key="speed",
         name="Speed",
-        native_unit_of_measurement=SPEED_KILOMETERS_PER_HOUR,
+        native_unit_of_measurement=UnitOfSpeed.KILOMETERS_PER_HOUR,
         device_class=SensorDeviceClass.SPEED,
         icon="mdi:speedometer",
         state_class=SensorStateClass.MEASUREMENT,
@@ -66,7 +65,7 @@ SENSOR_TYPES: tuple[SensorEntityDescription, ...] = (
     SensorEntityDescription(
         key="distance",
         name="Total Distance",
-        native_unit_of_measurement=LENGTH_KILOMETERS,
+        native_unit_of_measurement=UnitOfLength.KILOMETERS,
         device_class=SensorDeviceClass.DISTANCE,
         icon="mdi:map-marker-distance",
         state_class=SensorStateClass.TOTAL_INCREASING,
@@ -74,7 +73,7 @@ SENSOR_TYPES: tuple[SensorEntityDescription, ...] = (
     SensorEntityDescription(
         key="daily_distance",
         name="Daily Distance",
-        native_unit_of_measurement=LENGTH_KILOMETERS,
+        native_unit_of_measurement=UnitOfLength.KILOMETERS,
         device_class=SensorDeviceClass.DISTANCE,
         icon="mdi:map-marker-distance",
         state_class=SensorStateClass.TOTAL_INCREASING,

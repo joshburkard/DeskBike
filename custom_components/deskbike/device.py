@@ -6,24 +6,23 @@ from homeassistant.components.sensor import (
     SensorEntityDescription,
 )
 from homeassistant.const import (
-    CONF_NAME,
     PERCENTAGE,
-    LENGTH_KILOMETERS,
-    SPEED_KILOMETERS_PER_HOUR,
+    UnitOfLength,
+    UnitOfSpeed,
 )
 
 SENSOR_TYPES: tuple[SensorEntityDescription, ...] = (
     SensorEntityDescription(
         key="speed",
         name="Speed",
-        native_unit_of_measurement=SPEED_KILOMETERS_PER_HOUR,
+        native_unit_of_measurement=UnitOfSpeed.KILOMETERS_PER_HOUR,
         device_class=SensorDeviceClass.SPEED,
         icon="mdi:speedometer",
     ),
     SensorEntityDescription(
         key="distance",
         name="Distance",
-        native_unit_of_measurement=LENGTH_KILOMETERS,
+        native_unit_of_measurement=UnitOfLength.KILOMETERS,
         device_class=SensorDeviceClass.DISTANCE,
         icon="mdi:map-marker-distance",
     ),
