@@ -1,0 +1,102 @@
+﻿substitutions:
+  name: atom-bluetooth-proxy-a0bf20
+  friendly_name: Bluetooth Proxy Office
+packages:
+  esphome.bluetooth-proxy: github://esphome/bluetooth-proxies/m5stack/m5stack-atom-lite.yaml@main
+esphome:
+  name: ${name}
+  name_add_mac_suffix: false
+  friendly_name: ${friendly_name}
+api:
+  encryption:
+    key: xxxxxxxxxxxxxxxxxxxxxx/xxxxxxxxxxxxxxxx/x/x=
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+
+# Add the Bluetooth component with scanning enabled
+bluetooth_proxy:
+  active: true
+
+# Configure ESP32 BLE Tracker with more aggressive scanning
+esp32_ble_tracker:
+  scan_parameters:
+    interval: 1100ms
+    window: 1100ms
+    active: true
+
+# Create a global variable to track last seen time
+globals:
+  - id: last_deskbike_seen
+    type: uint32_t
+    restore_value: no
+    initial_value: '0'
+
+# Add sensors
+sensor:
+  # BLE RSSI sensor
+  - platform: ble_rssi
+    mac_address: "00:00:00:00:00:00" # add here the MAC-Address of your deskbike
+    name: "Desk Bike RSSI"
+    id: deskbike_rssi
+    filters:
+      - throttle: 60s  # Throttle updates to once per 60 seconds
+      # Add a lambda filter to update our presence sensor
+      - lambda: |-
+          // When this filter is called, it means we received an RSSI update
+          // Update last seen time
+          id(last_deskbike_seen) = millis();
+
+          // Return the original value
+          return x;
+
+  # Uptime sensor to periodically update the binary sensor
+  - platform: uptime
+    name: "Uptime Sensor"
+    id: uptime_sensor
+    update_interval: 15s
+    on_value:
+      then:
+        - binary_sensor.template.publish:
+            id: deskbike_presence
+            state: !lambda |-
+              if (id(last_deskbike_seen) > 0 &&
+                  (millis() - id(last_deskbike_seen)) < 180000) {
+                return true;
+              }
+              return false;
+
+# Binary sensor to indicate presence
+binary_sensor:
+  - platform: template
+    name: "Desk Bike Presence"
+    id: deskbike_presence
+    device_class: presence
+    lambda: |-
+      // Consider present if seen within the last 3 minutes
+      if (id(last_deskbike_seen) > 0 &&
+          (millis() - id(last_deskbike_seen)) < 180000) {
+        return true;
+      }
+      return false;
+
+# Create a switch to manually trigger BLE scans
+switch:
+  - platform: template
+    name: "Trigger BLE Scan"
+    id: trigger_ble_scan
+    turn_on_action:
+      - lambda: 'ESP_LOGD("ble", "Manually triggering BLE scan");'
+    turn_off_action:
+      - lambda: 'ESP_LOGD("ble", "BLE scan complete");'
+
+# Set up a time-based trigger to toggle the switch periodically
+time:
+  - platform: sntp
+    on_time:
+      - seconds: /30
+        then:
+          - switch.turn_on: trigger_ble_scan
+          - delay: 1s
+          - switch.turn_off: trigger_ble_scan

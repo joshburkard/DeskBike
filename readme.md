@@ -68,7 +68,35 @@ Recommended to be installed via [HACS](https://github.com/hacs/integration)
 
 ## Configuration
 
-Configure your ouwn weight and the resistance has an impact on the calculation of the burned calories.
+Configure your own weight and the resistance has an impact on the calculation of the burned calories.
+
+## M5Stack Atom Lite
+
+The current integration doesn't automatically reconnect to the DeskBike with the default configuration as Bluetooth proxy. To automatically reconnect, you can adjust the config of the ESP32 device like documented in this [YAML-File](atom-bluetooth-proxy.yaml). After that, you will find two new entities in Home Assistant:
+
+- Desk Bike Presence, which will be 'Away' or 'Home'
+- Desk Bike RSSI
+
+you can use this to automate the reconnect:
+
+```
+alias: Desk Bike reconnect
+description: ""
+triggers:
+  - trigger: state
+    entity_id:
+      - binary_sensor.atom_bluetooth_proxy_a0bf20_desk_bike_presence
+    from: "off"
+    to: "on"
+conditions: []
+actions:
+  - action: button.press
+    metadata: {}
+    data: {}
+    target:
+      entity_id: button.deskbike_reconnect
+mode: single
+```
 
 ## Notes
 
